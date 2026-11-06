@@ -14,6 +14,7 @@ const topLinks = [
 export default function TopNavbar({ onMenuClick }) {
   const { user, logout } = useAuth()
   const [menuOpen, setMenuOpen] = useState(false)
+  const photoUrl = user?.member?.photo_url || null
 
   return (
     <header className="sticky top-0 z-30 border-b border-border-color bg-white/95 backdrop-blur">
@@ -53,8 +54,12 @@ export default function TopNavbar({ onMenuClick }) {
             onClick={() => setMenuOpen((v) => !v)}
             className="flex items-center gap-2 rounded-full p-1 transition-colors hover:bg-slate-100"
           >
-            <span className="flex h-9 w-9 items-center justify-center rounded-full bg-primary text-sm font-semibold text-white">
-              {user?.name?.[0]?.toUpperCase() || 'U'}
+            <span className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-full bg-primary text-sm font-semibold text-white">
+              {photoUrl ? (
+                <img src={photoUrl} alt="" className="h-full w-full object-cover" />
+              ) : (
+                (user?.name?.[0]?.toUpperCase() || 'U')
+              )}
             </span>
             <span className="hidden text-left sm:block">
               <span className="block text-sm font-medium text-main-text">{user?.name}</span>

@@ -1,9 +1,9 @@
-import { Eye, Pencil, Trash2 } from 'lucide-react'
+import { Eye, Pencil, Trash2, Users } from 'lucide-react'
 import EmptyState from '@/components/common/EmptyState'
 import Pagination from '@/components/common/Pagination'
 import StatusBadge from '@/components/common/StatusBadge'
 import { TableSkeleton } from '@/components/common/Skeleton'
-import { Users } from 'lucide-react'
+import { getInitials } from '@/utils/format'
 
 export default function MemberTable({ members, loading, meta, selectedId, onSelect, onView, onEdit, onDelete, onPageChange }) {
   if (loading) {
@@ -44,8 +44,19 @@ export default function MemberTable({ members, loading, meta, selectedId, onSele
               >
                 <td className="table-td font-mono text-xs text-secondary-text">{member.member_code}</td>
                 <td className="table-td">
-                  <p className="font-medium text-main-text">{member.full_name}</p>
-                  <p className="text-xs text-secondary-text">{member.email}</p>
+                  <div className="flex items-center gap-3">
+                    {member.photo_url ? (
+                      <img src={member.photo_url} alt="" className="h-9 w-9 rounded-full object-cover" />
+                    ) : (
+                      <span className="flex h-9 w-9 items-center justify-center rounded-full bg-light-green text-xs font-bold text-primary">
+                        {getInitials(member.full_name)}
+                      </span>
+                    )}
+                    <div>
+                      <p className="font-medium text-main-text">{member.full_name}</p>
+                      <p className="text-xs text-secondary-text">{member.email}</p>
+                    </div>
+                  </div>
                 </td>
                 <td className="table-td">
                   <span className="inline-flex items-center rounded-lg bg-light-green px-2.5 py-1 text-xs font-medium text-primary">

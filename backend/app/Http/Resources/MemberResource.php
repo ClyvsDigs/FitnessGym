@@ -24,6 +24,7 @@ class MemberResource extends JsonResource
             'emergency_contact_name' => $this->emergency_contact_name,
             'emergency_contact_phone' => $this->emergency_contact_phone,
             'photo' => $this->photo,
+            'photo_url' => $this->photo ? asset('storage/' . $this->photo) : null,
             'status' => $this->status,
             'current_membership' => $this->whenLoaded('currentMembership', function () {
                 $current = $this->currentMembership;

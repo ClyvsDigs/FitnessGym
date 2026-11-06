@@ -60,7 +60,15 @@ class PortalController extends Controller
             'date_of_birth' => ['nullable', 'date', 'before_or_equal:today'],
             'emergency_contact_name' => ['nullable', 'string', 'max:255'],
             'emergency_contact_phone' => ['nullable', 'string', 'max:30'],
+            'photo' => ['nullable', 'image', 'max:2048'],
         ]);
+
+        if ($request->hasFile('photo')) {
+            if ($member->photo && \Storage::disk('public')->exists($member->photo)) {
+                \Storage::disk('public')->delete($member->photo);
+            }
+            $data['photo'] = $request->file('photo')->store('members', 'public');
+        }
 
         $member->update($data);
 

@@ -5,13 +5,16 @@ import EmptyState from '@/components/common/EmptyState'
 import ErrorState from '@/components/common/ErrorState'
 import LoadingSpinner from '@/components/common/LoadingSpinner'
 import Modal from '@/components/common/Modal'
+import PhotoUploader from '@/components/common/PhotoUploader'
 import StatusBadge from '@/components/common/StatusBadge'
 import PageHeader from '@/components/layout/PageHeader'
 import { portalService, settingsService } from '@/services'
 import { getErrorMessage } from '@/services/api'
+import { useAuth } from '@/context/AuthContext'
 import { formatCurrency, formatDate, formatDateTime, getInitials } from '@/utils/format'
 
 export default function MemberAccountPage() {
+  const { refreshUser } = useAuth()
   const [profile, setProfile] = useState(null)
   const [memberships, setMemberships] = useState([])
   const [payments, setPayments] = useState([])
@@ -23,6 +26,8 @@ export default function MemberAccountPage() {
   const [editOpen, setEditOpen] = useState(false)
   const [editForm, setEditForm] = useState(null)
   const [saving, setSaving] = useState(false)
+  const [photoFile, setPhotoFile] = useState(null)
+  const [photoPreview, setPhotoPreview] = useState('')
 
   const loadProfile = () => {
     setLoading(true)
@@ -69,15 +74,40 @@ export default function MemberAccountPage() {
       emergency_contact_name: profile.emergency_contact_name || '',
       emergency_contact_phone: profile.emergency_contact_phone || '',
     })
+    setPhotoFile(null)
+    setPhotoPreview(profile.photo_url || '')
     setEditOpen(true)
+  }
+
+  const handlePhotoChange = (file) => {
+    setPhotoFile(file)
+    if (file) {
+      const reader = new FileReader()
+      reader.onload = (e) => setPhotoPreview(e.target.result)
+      reader.readAsDataURL(file)
+    } else {
+      setPhotoPreview('')
+    }
   }
 
   const submitEdit = async (e) => {
     e.preventDefault()
     setSaving(true)
     try {
-      const res = await portalService.updateProfile(editForm)
+      let res
+      if (photoFile) {
+        const fd = new FormData()
+        fd.append('_method', 'PUT')
+        Object.entries(editForm).forEach(([key, value]) => {
+          if (value !== null && value !== undefined && value !== '') fd.append(key, value)
+        })
+        fd.append('photo', photoFile)
+        res = await portalService.updateProfilePost(fd)
+      } else {
+        res = await portalService.updateProfile(editForm)
+      }
       setProfile(res.data.data)
+      refreshUser?.()
       toast.success('Profile updated')
       setEditOpen(false)
     } catch (err) {
@@ -98,9 +128,17 @@ export default function MemberAccountPage() {
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="card h-fit overflow-hidden">
           <div className="bg-gradient-to-br from-primary to-secondary px-6 py-8 text-center">
-            <span className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-white/20 text-2xl font-bold text-white">
-              {getInitials(profile.full_name)}
-            </span>
+            {profile.photo_url ? (
+              <img
+                src={profile.photo_url}
+                alt={profile.full_name}
+                className="mx-auto h-20 w-20 rounded-full border-2 border-white/40 object-cover"
+              />
+            ) : (
+              <span className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-white/20 text-2xl font-bold text-white">
+                {getInitials(profile.full_name)}
+              </span>
+            )}
             <h2 className="mt-3 text-lg font-bold text-white">{profile.full_name}</h2>
             <p className="mt-1 text-sm text-white/80">{profile.member_code}</p>
             <div className="mt-3 flex justify-center">
@@ -252,6 +290,15 @@ export default function MemberAccountPage() {
       <Modal open={editOpen} title="Edit Profile" onClose={() => setEditOpen(false)}>
         {editForm && (
           <form onSubmit={submitEdit} className="grid gap-4 sm:grid-cols-2">
+            <div className="sm:col-span-2">
+              <PhotoUploader
+                name="photo"
+                preview={photoPreview}
+                onChange={handlePhotoChange}
+                fullName={`${editForm.first_name} ${editForm.last_name}`.trim()}
+              />
+            </div>
+
             <div>
               <label className="label">First Name *</label>
               <input className="input" value={editForm.first_name} onChange={(e) => setEditForm({ ...editForm, first_name: e.target.value })} required />

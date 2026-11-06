@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import toast from 'react-hot-toast'
 import LoadingSpinner from '@/components/common/LoadingSpinner'
 import Modal from '@/components/common/Modal'
+import PhotoUploader from '@/components/common/PhotoUploader'
 import { memberService, planService } from '@/services'
 import { getErrorMessage } from '@/services/api'
 
@@ -25,6 +26,8 @@ export default function MemberForm({ open, member, onClose, onSaved }) {
   const [plans, setPlans] = useState([])
   const [errors, setErrors] = useState({})
   const [saving, setSaving] = useState(false)
+  const [photoFile, setPhotoFile] = useState(null)
+  const [photoPreview, setPhotoPreview] = useState('')
 
   useEffect(() => {
     if (open) {
@@ -48,8 +51,12 @@ export default function MemberForm({ open, member, onClose, onSaved }) {
           plan_id: '',
           membership_start_date: '',
         })
+        setPhotoFile(null)
+        setPhotoPreview(member.photo_url || '')
       } else {
         setForm({ ...initialForm, membership_start_date: new Date().toISOString().slice(0, 10) })
+        setPhotoFile(null)
+        setPhotoPreview('')
       }
       setErrors({})
     }
@@ -68,6 +75,17 @@ export default function MemberForm({ open, member, onClose, onSaved }) {
     return Object.keys(errs).length === 0
   }
 
+  const handlePhotoChange = (file) => {
+    setPhotoFile(file)
+    if (file) {
+      const reader = new FileReader()
+      reader.onload = (e) => setPhotoPreview(e.target.result)
+      reader.readAsDataURL(file)
+    } else {
+      setPhotoPreview(member?.photo_url || '')
+    }
+  }
+
   const submit = async (e) => {
     e.preventDefault()
     if (!validate()) return
@@ -80,14 +98,27 @@ export default function MemberForm({ open, member, onClose, onSaved }) {
         membership_start_date: form.membership_start_date || null,
       }
 
-      if (member) {
-        await memberService.update(member.id, payload)
-        toast.success('Member updated successfully')
+      let res
+      if (photoFile) {
+        const fd = new FormData()
+        Object.entries(payload).forEach(([key, value]) => {
+          if (value !== null && value !== undefined && value !== '') fd.append(key, value)
+        })
+        fd.append('photo', photoFile)
+        if (member) {
+          fd.append('_method', 'PUT')
+          res = await memberService.updateWithPhoto(member.id, fd)
+        } else {
+          res = await memberService.create(fd)
+        }
+      } else if (member) {
+        res = await memberService.update(member.id, payload)
       } else {
-        await memberService.create(payload)
-        toast.success('Member created successfully')
+        res = await memberService.create(payload)
       }
-      onSaved()
+
+      toast.success(member ? 'Member updated successfully' : 'Member created successfully')
+      onSaved(res?.data?.data)
       onClose()
     } catch (error) {
       const message = getErrorMessage(error)
@@ -107,6 +138,16 @@ export default function MemberForm({ open, member, onClose, onSaved }) {
   return (
     <Modal open={open} title={member ? 'Edit Member' : 'Add New Member'} onClose={onClose} size="lg">
       <form onSubmit={submit} className="grid gap-4 sm:grid-cols-2">
+        <div className="sm:col-span-2">
+          <PhotoUploader
+            name="photo"
+            preview={photoPreview}
+            onChange={handlePhotoChange}
+            fullName={`${form.first_name} ${form.last_name}`.trim()}
+          />
+          {errors.photo && <p className="mt-1 text-xs text-red-600">{errors.photo}</p>}
+        </div>
+
         <div>
           <label className="label">First Name *</label>
           <input className="input" value={form.first_name} onChange={set('first_name')} />

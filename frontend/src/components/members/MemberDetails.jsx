@@ -20,9 +20,17 @@ export default function MemberDetails({ member }) {
   return (
     <div className="card overflow-hidden">
       <div className="bg-gradient-to-r from-primary to-secondary px-6 py-8 text-center">
-        <span className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-white/20 text-2xl font-bold text-white">
-          {getInitials(member.full_name)}
-        </span>
+        {member.photo_url ? (
+          <img
+            src={member.photo_url}
+            alt={member.full_name}
+            className="mx-auto h-20 w-20 rounded-full border-2 border-white/40 object-cover"
+          />
+        ) : (
+          <span className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-white/20 text-2xl font-bold text-white">
+            {getInitials(member.full_name)}
+          </span>
+        )}
         <h3 className="mt-3 text-lg font-bold text-white">{member.full_name}</h3>
         <p className="mt-0.5 text-sm text-green-100">{member.member_code}</p>
         <div className="mt-3 flex justify-center">

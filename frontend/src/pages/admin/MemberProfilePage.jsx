@@ -120,9 +120,17 @@ export default function MemberProfilePage() {
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="card h-fit overflow-hidden">
           <div className="bg-gradient-to-br from-primary to-secondary px-6 py-8 text-center">
-            <span className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-white/20 text-2xl font-bold text-white">
-              {getInitials(member.full_name)}
-            </span>
+            {member.photo_url ? (
+              <img
+                src={member.photo_url}
+                alt={member.full_name}
+                className="mx-auto h-20 w-20 rounded-full border-2 border-white/40 object-cover"
+              />
+            ) : (
+              <span className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-white/20 text-2xl font-bold text-white">
+                {getInitials(member.full_name)}
+              </span>
+            )}
             <h2 className="mt-3 text-lg font-bold text-white">{member.full_name}</h2>
             <div className="mt-3 flex justify-center">
               <StatusBadge status={member.status} />

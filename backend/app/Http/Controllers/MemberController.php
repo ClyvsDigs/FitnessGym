@@ -67,10 +67,16 @@ class MemberController extends Controller
     public function store(MemberRequest $request): JsonResponse
     {
         $member = DB::transaction(function () use ($request) {
-            $member = Member::create($request->safe()->except(['plan_id', 'membership_start_date', 'membership_end_date']) + [
+            $data = $request->safe()->except(['plan_id', 'membership_start_date', 'membership_end_date', 'photo']) + [
                 'member_code' => Member::generateCode(),
                 'status' => $request->input('status', 'pending'),
-            ]);
+            ];
+
+            if ($request->hasFile('photo')) {
+                $data['photo'] = $request->file('photo')->store('members', 'public');
+            }
+
+            $member = Member::create($data);
 
             if ($request->filled('plan_id')) {
                 $plan = \App\Models\MembershipPlan::findOrFail($request->plan_id);
@@ -113,7 +119,13 @@ class MemberController extends Controller
 
     public function update(MemberRequest $request, Member $member): JsonResponse
     {
-        $member->update($request->safe()->except(['plan_id', 'membership_start_date', 'membership_end_date']));
+        $data = $request->safe()->except(['plan_id', 'membership_start_date', 'membership_end_date', 'photo']);
+
+        if ($request->hasFile('photo')) {
+            $data['photo'] = $request->file('photo')->store('members', 'public');
+        }
+
+        $member->update($data);
 
         if ($request->filled('plan_id') && $request->filled('membership_start_date')) {
             DB::transaction(function () use ($request, $member) {

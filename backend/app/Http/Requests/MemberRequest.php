@@ -25,6 +25,7 @@ class MemberRequest extends FormRequest
             'gender' => ['nullable', 'in:male,female,other'],
             'emergency_contact_name' => ['nullable', 'string', 'max:255'],
             'emergency_contact_phone' => ['nullable', 'string', 'max:30'],
+            'photo' => ['nullable', 'image', 'max:2048'],
             'status' => ['sometimes', 'in:active,pending,expired,suspended'],
             'plan_id' => ['nullable', 'exists:membership_plans,id'],
             'membership_start_date' => ['nullable', 'date', 'required_if:plan_id,*'],
