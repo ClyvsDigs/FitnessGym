@@ -7,6 +7,8 @@ use App\Http\Resources\MemberResource;
 use App\Http\Resources\MembershipResource;
 use App\Http\Resources\PaymentResource;
 use App\Models\Member;
+use App\Rules\PersonName;
+use App\Rules\PhoneNumber;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -52,15 +54,15 @@ class PortalController extends Controller
         $member = $this->resolveMember($request);
 
         $data = $request->validate([
-            'first_name' => ['required', 'string', 'max:255'],
-            'last_name' => ['required', 'string', 'max:255'],
-            'phone' => ['nullable', 'string', 'max:30'],
-            'address' => ['nullable', 'string', 'max:500'],
+            'first_name' => ['required', 'string', 'max:100', new PersonName],
+            'last_name' => ['required', 'string', 'max:100', new PersonName],
+            'phone' => ['nullable', 'string', 'max:30', new PhoneNumber],
+            'address' => ['nullable', 'string', 'max:255'],
             'gender' => ['nullable', 'in:male,female,other'],
             'date_of_birth' => ['nullable', 'date', 'before_or_equal:today'],
-            'emergency_contact_name' => ['nullable', 'string', 'max:255'],
-            'emergency_contact_phone' => ['nullable', 'string', 'max:30'],
-            'photo' => ['nullable', 'image', 'max:2048'],
+            'emergency_contact_name' => ['nullable', 'string', 'max:255', new PersonName],
+            'emergency_contact_phone' => ['nullable', 'string', 'max:30', new PhoneNumber],
+            'photo' => ['nullable', 'image', 'mimes:jpg,jpeg,png', 'max:2048'],
         ]);
 
         if ($request->hasFile('photo')) {

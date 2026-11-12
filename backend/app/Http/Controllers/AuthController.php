@@ -13,6 +13,9 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Password;
+use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Support\Str;
+use Illuminate\Validation\Rules\Password as PasswordRule;
 use Illuminate\Validation\ValidationException;
 
 class AuthController extends Controller
@@ -53,9 +56,21 @@ class AuthController extends Controller
 
     public function login(LoginRequest $request): JsonResponse
     {
+        $throttleKey = Str::lower($request->email) . '|' . $request->ip();
+
+        if (RateLimiter::tooManyAttempts($throttleKey, 5)) {
+            $seconds = RateLimiter::availableIn($throttleKey);
+
+            throw ValidationException::withMessages([
+                'email' => ["Too many login attempts. Please try again in {$seconds} seconds."],
+            ]);
+        }
+
         $user = User::where('email', $request->email)->first();
 
         if (! $user || ! Hash::check($request->password, $user->password)) {
+            RateLimiter::hit($throttleKey, 60);
+
             throw ValidationException::withMessages([
                 'email' => ['The provided credentials are incorrect.'],
             ]);
@@ -66,6 +81,8 @@ class AuthController extends Controller
                 'email' => ['Your account has been deactivated. Please contact the administrator.'],
             ]);
         }
+
+        RateLimiter::clear($throttleKey);
 
         $token = $user->createToken('auth-token')->plainTextToken;
 
@@ -103,9 +120,12 @@ class AuthController extends Controller
     public function resetPassword(Request $request): JsonResponse
     {
         $request->validate([
-            'token' => ['required'],
+            'token' => ['required', 'string'],
             'email' => ['required', 'email'],
-            'password' => ['required', 'confirmed', \Illuminate\Validation\Rules\Password::min(8)],
+            'password' => [
+                'required', 'confirmed',
+                PasswordRule::min(8)->letters()->numbers(),
+            ],
         ]);
 
         $status = Password::reset(

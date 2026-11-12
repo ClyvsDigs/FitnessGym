@@ -54,7 +54,9 @@ export const trainerService = {
   list: (params) => api.get('/trainers', { params }),
   get: (id) => api.get(`/trainers/${id}`),
   create: (data) => api.post('/trainers', data),
+  createWithPhoto: (formData) => api.post('/trainers', formData),
   update: (id, data) => api.put(`/trainers/${id}`, data),
+  updateWithPhoto: (id, formData) => api.post(`/trainers/${id}`, formData),
   delete: (id) => api.delete(`/trainers/${id}`),
 }
 
@@ -76,8 +78,11 @@ export const settingsService = {
   update: (data) => api.put('/settings', data),
   users: (params) => api.get('/settings/users', { params }),
   createUser: (data) => api.post('/settings/users', data),
+  createUserWithAvatar: (formData) => api.post('/settings/users', formData),
   updateUser: (id, data) => api.put(`/settings/users/${id}`, data),
+  updateUserWithAvatar: (id, formData) => api.post(`/settings/users/${id}`, formData),
   updateProfile: (data) => api.put('/profile', data),
+  updateProfileWithAvatar: (formData) => api.post('/profile', formData),
 }
 
 export const portalService = {

@@ -109,7 +109,7 @@ export default function App() {
         <Route
           path="settings"
           element={
-            <ProtectedRoute roles={['admin']}>
+            <ProtectedRoute roles={['admin', 'staff', 'trainer']}>
               <SettingsPage />
             </ProtectedRoute>
           }

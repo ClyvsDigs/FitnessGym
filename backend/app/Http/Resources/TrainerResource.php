@@ -9,8 +9,11 @@ class TrainerResource extends JsonResource
 {
     public function toArray(Request $request): array
     {
+        $avatar = $this->user?->avatar;
+
         return [
             'id' => $this->id,
+            'user_id' => $this->user_id,
             'first_name' => $this->first_name,
             'last_name' => $this->last_name,
             'full_name' => $this->full_name,
@@ -20,7 +23,11 @@ class TrainerResource extends JsonResource
             'availability' => $this->availability,
             'bio' => $this->bio,
             'photo' => $this->photo,
+            'photo_url' => $this->photo
+                ? asset('storage/' . $this->photo)
+                : ($avatar ? asset('storage/' . $avatar) : null),
             'status' => $this->status,
+            'has_login' => (bool) $this->user_id,
             'appointments_count' => $this->whenCounted('appointments'),
             'created_at' => $this->created_at?->toIso8601String(),
         ];

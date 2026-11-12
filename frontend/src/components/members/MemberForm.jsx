@@ -5,6 +5,8 @@ import Modal from '@/components/common/Modal'
 import PhotoUploader from '@/components/common/PhotoUploader'
 import { memberService, planService } from '@/services'
 import { getErrorMessage } from '@/services/api'
+import { sanitizePhone } from '@/utils/format'
+import { isValidEmail, isValidName, isValidPhone } from '@/utils/validation'
 
 const initialForm = {
   first_name: '',
@@ -62,15 +64,32 @@ export default function MemberForm({ open, member, onClose, onSaved }) {
     }
   }, [open, member])
 
-  const set = (key) => (e) => setForm((f) => ({ ...f, [key]: e.target.value }))
+  const set = (key) => (e) => {
+    const value = e.target.value
+    setForm((f) => ({ ...f, [key]: key.includes('phone') ? sanitizePhone(value) : value }))
+    setErrors((prev) => (prev[key] ? { ...prev, [key]: undefined } : prev))
+  }
 
   const validate = () => {
     const errs = {}
-    if (!form.first_name.trim()) errs.first_name = 'First name is required'
-    if (!form.last_name.trim()) errs.last_name = 'Last name is required'
-    if (!form.email.trim()) errs.email = 'Email is required'
-    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) errs.email = 'Enter a valid email'
-    if (form.plan_id && !form.membership_start_date) errs.membership_start_date = 'Start date is required with a plan'
+    if (!form.first_name.trim()) errs.first_name = 'First name is required.'
+    else if (!isValidName(form.first_name)) errs.first_name = 'Use letters, spaces, hyphens, apostrophes or periods only.'
+    if (!form.last_name.trim()) errs.last_name = 'Last name is required.'
+    else if (!isValidName(form.last_name)) errs.last_name = 'Use letters, spaces, hyphens, apostrophes or periods only.'
+    if (!form.email.trim()) errs.email = 'Email is required.'
+    else if (!isValidEmail(form.email)) errs.email = 'Enter a valid email address.'
+    if (form.phone && !isValidPhone(form.phone)) errs.phone = 'Enter a valid PH mobile number (e.g. 09171234567).'
+    if (form.address && form.address.length > 255) errs.address = 'Address must be 255 characters or fewer.'
+    if (form.date_of_birth && form.date_of_birth > new Date().toISOString().slice(0, 10)) {
+      errs.date_of_birth = 'Date of birth cannot be in the future.'
+    }
+    if (form.emergency_contact_name && !isValidName(form.emergency_contact_name)) {
+      errs.emergency_contact_name = 'Use letters and common name punctuation only.'
+    }
+    if (form.emergency_contact_phone && !isValidPhone(form.emergency_contact_phone)) {
+      errs.emergency_contact_phone = 'Enter a valid PH mobile number (e.g. 09171234567).'
+    }
+    if (form.plan_id && !form.membership_start_date) errs.membership_start_date = 'Start date is required with a plan.'
     setErrors(errs)
     return Object.keys(errs).length === 0
   }
@@ -88,6 +107,7 @@ export default function MemberForm({ open, member, onClose, onSaved }) {
 
   const submit = async (e) => {
     e.preventDefault()
+    if (saving) return
     if (!validate()) return
 
     setSaving(true)
@@ -137,7 +157,7 @@ export default function MemberForm({ open, member, onClose, onSaved }) {
 
   return (
     <Modal open={open} title={member ? 'Edit Member' : 'Add New Member'} onClose={onClose} size="lg">
-      <form onSubmit={submit} className="grid gap-4 sm:grid-cols-2">
+      <form onSubmit={submit} noValidate className="grid gap-4 sm:grid-cols-2">
         <div className="sm:col-span-2">
           <PhotoUploader
             name="photo"
@@ -145,35 +165,44 @@ export default function MemberForm({ open, member, onClose, onSaved }) {
             onChange={handlePhotoChange}
             fullName={`${form.first_name} ${form.last_name}`.trim()}
           />
-          {errors.photo && <p className="mt-1 text-xs text-red-600">{errors.photo}</p>}
+          {errors.photo && <p className="form-error">{errors.photo}</p>}
         </div>
 
         <div>
           <label className="label">First Name *</label>
-          <input className="input" value={form.first_name} onChange={set('first_name')} />
-          {errors.first_name && <p className="mt-1 text-xs text-red-600">{errors.first_name}</p>}
+          <input className={`input ${errors.first_name ? 'input-invalid' : ''}`} value={form.first_name} onChange={set('first_name')} />
+          {errors.first_name && <p className="form-error">{errors.first_name}</p>}
         </div>
         <div>
           <label className="label">Last Name *</label>
-          <input className="input" value={form.last_name} onChange={set('last_name')} />
-          {errors.last_name && <p className="mt-1 text-xs text-red-600">{errors.last_name}</p>}
+          <input className={`input ${errors.last_name ? 'input-invalid' : ''}`} value={form.last_name} onChange={set('last_name')} />
+          {errors.last_name && <p className="form-error">{errors.last_name}</p>}
         </div>
         <div>
           <label className="label">Email *</label>
-          <input type="email" className="input" value={form.email} onChange={set('email')} />
-          {errors.email && <p className="mt-1 text-xs text-red-600">{errors.email}</p>}
+          <input type="email" className={`input ${errors.email ? 'input-invalid' : ''}`} value={form.email} onChange={set('email')} />
+          {errors.email && <p className="form-error">{errors.email}</p>}
         </div>
         <div>
           <label className="label">Phone</label>
-          <input className="input" value={form.phone} onChange={set('phone')} placeholder="+63 9XX XXX XXXX" />
+          <input className={`input ${errors.phone ? 'input-invalid' : ''}`} value={form.phone} onChange={set('phone')} placeholder="+63 9XX XXX XXXX" />
+          {errors.phone && <p className="form-error">{errors.phone}</p>}
         </div>
         <div className="sm:col-span-2">
           <label className="label">Address</label>
-          <input className="input" value={form.address} onChange={set('address')} />
+          <input className={`input ${errors.address ? 'input-invalid' : ''}`} value={form.address} onChange={set('address')} maxLength={255} />
+          {errors.address && <p className="form-error">{errors.address}</p>}
         </div>
         <div>
           <label className="label">Date of Birth</label>
-          <input type="date" className="input" value={form.date_of_birth} onChange={set('date_of_birth')} />
+          <input
+            type="date"
+            className={`input ${errors.date_of_birth ? 'input-invalid' : ''}`}
+            value={form.date_of_birth}
+            onChange={set('date_of_birth')}
+            max={new Date().toISOString().slice(0, 10)}
+          />
+          {errors.date_of_birth && <p className="form-error">{errors.date_of_birth}</p>}
         </div>
         <div>
           <label className="label">Gender</label>
@@ -186,11 +215,22 @@ export default function MemberForm({ open, member, onClose, onSaved }) {
         </div>
         <div>
           <label className="label">Emergency Contact Name</label>
-          <input className="input" value={form.emergency_contact_name} onChange={set('emergency_contact_name')} />
+          <input
+            className={`input ${errors.emergency_contact_name ? 'input-invalid' : ''}`}
+            value={form.emergency_contact_name}
+            onChange={set('emergency_contact_name')}
+          />
+          {errors.emergency_contact_name && <p className="form-error">{errors.emergency_contact_name}</p>}
         </div>
         <div>
           <label className="label">Emergency Contact Phone</label>
-          <input className="input" value={form.emergency_contact_phone} onChange={set('emergency_contact_phone')} />
+          <input
+            className={`input ${errors.emergency_contact_phone ? 'input-invalid' : ''}`}
+            value={form.emergency_contact_phone}
+            onChange={set('emergency_contact_phone')}
+            placeholder="+63 9XX XXX XXXX"
+          />
+          {errors.emergency_contact_phone && <p className="form-error">{errors.emergency_contact_phone}</p>}
         </div>
 
         <div className="sm:col-span-2 rounded-xl border border-dashed border-primary/40 bg-pale-green p-4">
@@ -209,8 +249,13 @@ export default function MemberForm({ open, member, onClose, onSaved }) {
             </div>
             <div>
               <label className="label">Start Date</label>
-              <input type="date" className="input" value={form.membership_start_date} onChange={set('membership_start_date')} />
-              {errors.membership_start_date && <p className="mt-1 text-xs text-red-600">{errors.membership_start_date}</p>}
+              <input
+                type="date"
+                className={`input ${errors.membership_start_date ? 'input-invalid' : ''}`}
+                value={form.membership_start_date}
+                onChange={set('membership_start_date')}
+              />
+              {errors.membership_start_date && <p className="form-error">{errors.membership_start_date}</p>}
             </div>
             <div>
               <label className="label">Status</label>

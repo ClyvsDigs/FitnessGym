@@ -22,6 +22,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::get('/user', [AuthController::class, 'me']);
     Route::put('/profile', [SettingController::class, 'updateProfile']);
+    Route::post('/profile', [SettingController::class, 'updateProfile']);
 
     Route::middleware('role:admin,staff,trainer')->group(function () {
         Route::get('/dashboard/summary', [DashboardController::class, 'summary']);
@@ -33,6 +34,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::middleware('role:admin,staff')->group(function () {
         Route::apiResource('members', MemberController::class);
+        Route::post('members/{member}', [MemberController::class, 'update']);
         Route::patch('members/{member}/status', [MemberController::class, 'updateStatus']);
         Route::get('members/{member}/memberships', [MemberController::class, 'memberships']);
         Route::get('members/{member}/payments', [MemberController::class, 'payments']);
@@ -41,6 +43,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::apiResource('plans', PlanController::class);
         Route::apiResource('payments', PaymentController::class)->only(['index', 'store', 'show', 'update']);
         Route::apiResource('trainers', TrainerController::class);
+        Route::post('trainers/{trainer}', [TrainerController::class, 'update']);
         Route::apiResource('appointments', AppointmentController::class);
 
         Route::get('/reports/members', [ReportController::class, 'members']);
@@ -61,6 +64,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::middleware('role:member')->group(function () {
         Route::get('/portal/profile', [PortalController::class, 'profile']);
         Route::put('/portal/profile', [PortalController::class, 'updateProfile']);
+        Route::post('/portal/profile', [PortalController::class, 'updateProfile']);
         Route::get('/portal/memberships', [PortalController::class, 'memberships']);
         Route::get('/portal/payments', [PortalController::class, 'payments']);
         Route::get('/portal/attendance', [PortalController::class, 'attendance']);
@@ -72,5 +76,6 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/settings/users', [SettingController::class, 'users']);
         Route::post('/settings/users', [SettingController::class, 'storeUser']);
         Route::put('/settings/users/{user}', [SettingController::class, 'updateUser']);
+        Route::post('/settings/users/{user}', [SettingController::class, 'updateUser']);
     });
 });

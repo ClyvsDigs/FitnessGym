@@ -8,6 +8,7 @@ use App\Models\Member;
 use App\Models\Membership;
 use App\Models\MembershipPlan;
 use App\Models\Payment;
+use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -48,41 +49,55 @@ class PaymentController extends Controller
 
     public function store(PaymentRequest $request): JsonResponse
     {
-        $payment = DB::transaction(function () use ($request) {
+        $data = $request->validated();
+        $status = $data['status'] ?? 'pending';
+        $data['reference_number'] = $this->normalizeReference($data['reference_number'] ?? null);
+
+        $payment = DB::transaction(function () use ($request, $data, $status) {
             $payment = Payment::create([
                 'payment_number' => $this->generatePaymentNumber(),
-                'member_id' => $request->member_id,
-                'membership_plan_id' => $request->membership_plan_id,
-                'amount' => $request->amount,
-                'payment_method' => $request->payment_method,
-                'status' => $request->input('status', 'pending'),
-                'reference_number' => $request->reference_number,
-                'notes' => $request->notes,
-                'paid_at' => $request->status === 'paid' || $request->input('status') === 'paid'
-                    ? ($request->paid_at ?? now())
-                    : $request->paid_at,
+                'member_id' => $data['member_id'],
+                'membership_plan_id' => $data['membership_plan_id'] ?? null,
+                'amount' => $data['amount'],
+                'payment_method' => $data['payment_method'],
+                'status' => $status,
+                'reference_number' => $data['reference_number'] ?? null,
+                'notes' => $data['notes'] ?? null,
+                'paid_at' => $status === 'paid'
+                    ? ($data['paid_at'] ?? now())
+                    : ($data['paid_at'] ?? null),
                 'recorded_by' => $request->user()->id,
             ]);
 
-            if ($request->boolean('create_membership') && $request->filled('membership_plan_id')) {
-                $plan = MembershipPlan::findOrFail($request->membership_plan_id);
+            if (! empty($data['create_membership']) && ! empty($data['membership_plan_id'])) {
+                $plan = MembershipPlan::findOrFail($data['membership_plan_id']);
 
-                Membership::where('member_id', $request->member_id)
+                if ($plan->status !== 'active') {
+                    abort(422, 'Archived plans cannot be assigned to a membership.');
+                }
+
+                $start = Carbon::parse($data['membership_start_date']);
+                $end = isset($data['membership_end_date'])
+                    ? Carbon::parse($data['membership_end_date'])
+                    : $start->copy()->addDays($plan->duration_days);
+
+                // Close the previous active membership before starting a new one so periods do not overlap.
+                Membership::where('member_id', $data['member_id'])
                     ->where('status', 'active')
                     ->update(['status' => 'expired']);
 
                 $membership = Membership::create([
-                    'member_id' => $request->member_id,
+                    'member_id' => $data['member_id'],
                     'membership_plan_id' => $plan->id,
-                    'start_date' => $request->membership_start_date,
-                    'end_date' => $request->membership_end_date ?? now()->addDays($plan->duration_days)->toDateString(),
+                    'start_date' => $start->toDateString(),
+                    'end_date' => $end->toDateString(),
                     'amount' => $plan->price,
                     'status' => 'active',
                     'created_by' => $request->user()->id,
                 ]);
 
                 $payment->update(['membership_id' => $membership->id]);
-                Member::whereKey($request->member_id)->update(['status' => 'active']);
+                Member::whereKey($data['member_id'])->update(['status' => 'active']);
             }
 
             return $payment;
@@ -103,16 +118,37 @@ class PaymentController extends Controller
 
     public function update(PaymentRequest $request, Payment $payment): JsonResponse
     {
-        $payment->update($request->safe()->except(['member_id', 'create_membership', 'membership_start_date', 'membership_end_date']));
+        $data = $request->validated();
 
-        if ($request->status === 'paid' && ! $payment->paid_at) {
-            $payment->update(['paid_at' => $request->paid_at ?? now()]);
+        // A payment's owner and the membership-creation flags cannot be changed after the fact.
+        unset(
+            $data['member_id'],
+            $data['create_membership'],
+            $data['membership_start_date'],
+            $data['membership_end_date'],
+        );
+
+        if (array_key_exists('reference_number', $data)) {
+            $data['reference_number'] = $this->normalizeReference($data['reference_number']);
+        }
+
+        $payment->update($data);
+
+        if (($data['status'] ?? null) === 'paid' && ! $payment->paid_at) {
+            $payment->update(['paid_at' => $data['paid_at'] ?? now()]);
         }
 
         return response()->json([
             'message' => 'Payment updated successfully.',
             'data' => new PaymentResource($payment->fresh()->load(['member', 'plan'])),
         ]);
+    }
+
+    private function normalizeReference(?string $reference): ?string
+    {
+        $reference = $reference !== null ? trim($reference) : null;
+
+        return $reference === '' ? null : $reference;
     }
 
     private function generatePaymentNumber(): string

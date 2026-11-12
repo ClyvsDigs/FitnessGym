@@ -3,6 +3,7 @@
 namespace App\Http\Requests;
 
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 class PlanRequest extends FormRequest
 {
@@ -13,15 +14,28 @@ class PlanRequest extends FormRequest
 
     public function rules(): array
     {
+        $planId = $this->route('plan')?->id ?? $this->route('plan');
+
         return [
-            'name' => ['required', 'string', 'max:255'],
-            'description' => ['nullable', 'string'],
+            'name' => [
+                'required', 'string', 'max:255',
+                Rule::unique('membership_plans', 'name')->ignore($planId),
+            ],
+            'description' => ['nullable', 'string', 'max:2000'],
             'type' => ['required', 'in:weekly,monthly,quarterly,annual'],
-            'duration_days' => ['required', 'integer', 'min:1'],
-            'price' => ['required', 'numeric', 'min:0'],
-            'benefits' => ['nullable', 'array'],
-            'benefits.*' => ['string'],
+            'duration_days' => ['required', 'integer', 'min:1', 'max:3650'],
+            'price' => ['required', 'numeric', 'min:0', 'max:99999999'],
+            'benefits' => ['nullable', 'array', 'max:50'],
+            'benefits.*' => ['string', 'max:255'],
             'status' => ['sometimes', 'in:active,archived'],
+        ];
+    }
+
+    public function messages(): array
+    {
+        return [
+            'name.unique' => 'A membership plan with this name already exists.',
+            'duration_days.min' => 'A membership plan must last at least one day.',
         ];
     }
 }

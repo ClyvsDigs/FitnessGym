@@ -7,7 +7,7 @@ import ErrorState from '@/components/common/ErrorState'
 import LoadingSpinner from '@/components/common/LoadingSpinner'
 import Modal from '@/components/common/Modal'
 import Pagination from '@/components/common/Pagination'
-import { CardSkeleton, TableSkeleton } from '@/components/common/Skeleton'
+import { TableSkeleton } from '@/components/common/Skeleton'
 import StatusBadge from '@/components/common/StatusBadge'
 import PageHeader from '@/components/layout/PageHeader'
 import { useDebounce } from '@/hooks/useDebounce'
@@ -31,6 +31,7 @@ export default function PlansPage() {
   const [formOpen, setFormOpen] = useState(false)
   const [editing, setEditing] = useState(null)
   const [form, setForm] = useState(initialForm)
+  const [errors, setErrors] = useState({})
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(null)
 
@@ -54,6 +55,7 @@ export default function PlansPage() {
 
   const openForm = (plan = null) => {
     setEditing(plan)
+    setErrors({})
     setForm(
       plan
         ? {
@@ -70,9 +72,36 @@ export default function PlansPage() {
     setFormOpen(true)
   }
 
+  const setField = (key, value) => {
+    setForm((prev) => ({ ...prev, [key]: value }))
+    setErrors((prev) => (prev[key] ? { ...prev, [key]: undefined } : prev))
+  }
+
+  const validate = () => {
+    const next = {}
+    if (!form.name.trim()) next.name = 'Plan name is required.'
+    else if (form.name.length > 255) next.name = 'Plan name must be 255 characters or fewer.'
+    if (form.description && form.description.length > 2000) next.description = 'Description must be 2000 characters or fewer.'
+    if (!['weekly', 'monthly', 'quarterly', 'annual'].includes(form.type)) next.type = 'Select a valid plan type.'
+    const duration = Number(form.duration_days)
+    if (!form.duration_days || Number.isNaN(duration) || duration < 1) next.duration_days = 'Duration must be at least 1 day.'
+    const price = Number(form.price)
+    if (form.price === '' || Number.isNaN(price)) next.price = 'Price is required.'
+    else if (price < 0) next.price = 'Price cannot be negative.'
+    return next
+  }
+
   const submit = async (e) => {
     e.preventDefault()
+    if (saving) return
+    const validation = validate()
+    if (Object.keys(validation).length) {
+      setErrors(validation)
+      return
+    }
+
     setSaving(true)
+    setErrors({})
     try {
       const payload = {
         ...form,
@@ -90,6 +119,10 @@ export default function PlansPage() {
       setFormOpen(false)
       load()
     } catch (err) {
+      const fieldErrors = err?.response?.data?.errors
+      if (fieldErrors) {
+        setErrors(Object.fromEntries(Object.entries(fieldErrors).map(([key, value]) => [key, [].concat(value)[0]])))
+      }
       toast.error(getErrorMessage(err))
     } finally {
       setSaving(false)
@@ -181,41 +214,74 @@ export default function PlansPage() {
         )}
       </div>
 
-      <Modal open={formOpen} title={editing ? 'Edit Plan' : 'Add Plan'} onClose={() => setFormOpen(false)}>
-        <form onSubmit={submit} className="space-y-4">
+      <Modal open={formOpen} title={editing ? 'Edit Plan' : 'Add Plan'} onClose={() => !saving && setFormOpen(false)}>
+        <form onSubmit={submit} noValidate className="space-y-4">
           <div>
             <label className="label">Plan Name *</label>
-            <input className="input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
+            <input
+              className={`input ${errors.name ? 'input-invalid' : ''}`}
+              value={form.name}
+              onChange={(e) => setField('name', e.target.value)}
+              maxLength={255}
+            />
+            {errors.name && <p className="form-error">{errors.name}</p>}
           </div>
           <div>
             <label className="label">Description</label>
-            <textarea className="input" rows={2} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
+            <textarea
+              className={`input ${errors.description ? 'input-invalid' : ''}`}
+              rows={2}
+              value={form.description}
+              onChange={(e) => setField('description', e.target.value)}
+              maxLength={2000}
+            />
+            {errors.description && <p className="form-error">{errors.description}</p>}
           </div>
           <div className="grid gap-4 sm:grid-cols-3">
             <div>
               <label className="label">Type *</label>
-              <select className="input" value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}>
+              <select
+                className={`input ${errors.type ? 'input-invalid' : ''}`}
+                value={form.type}
+                onChange={(e) => setField('type', e.target.value)}
+              >
                 {Object.entries(typeLabels).map(([v, l]) => (
                   <option key={v} value={v}>{l}</option>
                 ))}
               </select>
+              {errors.type && <p className="form-error">{errors.type}</p>}
             </div>
             <div>
               <label className="label">Duration (days) *</label>
-              <input type="number" min="1" className="input" value={form.duration_days} onChange={(e) => setForm({ ...form, duration_days: e.target.value })} required />
+              <input
+                type="number"
+                min="1"
+                className={`input ${errors.duration_days ? 'input-invalid' : ''}`}
+                value={form.duration_days}
+                onChange={(e) => setField('duration_days', e.target.value)}
+              />
+              {errors.duration_days && <p className="form-error">{errors.duration_days}</p>}
             </div>
             <div>
               <label className="label">Price *</label>
-              <input type="number" min="0" step="0.01" className="input" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} required />
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                className={`input ${errors.price ? 'input-invalid' : ''}`}
+                value={form.price}
+                onChange={(e) => setField('price', e.target.value)}
+              />
+              {errors.price && <p className="form-error">{errors.price}</p>}
             </div>
           </div>
           <div>
             <label className="label">Benefits (one per line)</label>
-            <textarea className="input" rows={4} value={form.benefits} onChange={(e) => setForm({ ...form, benefits: e.target.value })} placeholder={'Gym floor access\nGroup classes'} />
+            <textarea className="input" rows={4} value={form.benefits} onChange={(e) => setField('benefits', e.target.value)} placeholder={'Gym floor access\nGroup classes'} />
           </div>
           <div>
             <label className="label">Status</label>
-            <select className="input" value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>
+            <select className="input" value={form.status} onChange={(e) => setField('status', e.target.value)}>
               <option value="active">Active</option>
               <option value="archived">Archived</option>
             </select>

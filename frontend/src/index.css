@@ -7,7 +7,7 @@
   --color-accent: #22c55e;
   --color-light-green: #dcfce7;
   --color-pale-green: #f0fdf4;
-  --color-main-bg: #f8fafc;
+  --color-main-bg: #f0fdf4;
   --color-main-text: #0f172a;
   --color-secondary-text: #64748b;
   --color-border-color: #e2e8f0;
@@ -19,6 +19,12 @@ body {
   background-color: var(--color-main-bg);
   color: var(--color-main-text);
   -webkit-font-smoothing: antialiased;
+}
+
+/* Hide the browser's built-in password reveal control so only our toggle shows. */
+input[type='password']::-ms-reveal,
+input[type='password']::-ms-clear {
+  display: none;
 }
 
 @layer components {
@@ -36,6 +42,12 @@ body {
   }
   .input {
     @apply w-full rounded-xl border border-border-color bg-white px-3.5 py-2.5 text-sm text-main-text placeholder:text-secondary-text focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-shadow disabled:bg-gray-50;
+  }
+  .input-invalid {
+    @apply border-red-500 focus:border-red-500 focus:ring-red-500/30;
+  }
+  .form-error {
+    @apply mt-1 text-xs font-medium text-red-600;
   }
   .label {
     @apply block text-sm font-medium text-main-text mb-1.5;

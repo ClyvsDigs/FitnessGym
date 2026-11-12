@@ -29,9 +29,14 @@ const memberLinks = [
   { to: '/member/profile', label: 'My Profile', icon: Users },
 ]
 
+const trainerLinks = adminLinks.filter((link) =>
+  ['/admin/dashboard', '/admin/attendance', '/admin/settings'].includes(link.to),
+)
+
 export default function Sidebar({ open, onClose }) {
   const { user } = useAuth()
-  const links = user?.role === 'member' ? memberLinks : adminLinks
+  const links =
+    user?.role === 'member' ? memberLinks : user?.role === 'trainer' ? trainerLinks : adminLinks
 
   const content = (
     <div className="flex h-full flex-col">
@@ -70,18 +75,6 @@ export default function Sidebar({ open, onClose }) {
           </NavLink>
         ))}
       </nav>
-
-      <div className="border-t border-border-color p-4">
-        <div className="flex items-center gap-3">
-          <span className="flex h-10 w-10 items-center justify-center rounded-full bg-light-green text-sm font-bold text-primary">
-            {user?.name?.[0]?.toUpperCase() || 'U'}
-          </span>
-          <div className="min-w-0">
-            <p className="truncate text-sm font-medium text-main-text">{user?.name}</p>
-            <p className="text-xs capitalize text-secondary-text">{user?.role}</p>
-          </div>
-        </div>
-      </div>
     </div>
   )
 
@@ -94,7 +87,7 @@ export default function Sidebar({ open, onClose }) {
         onClick={onClose}
       />
       <aside
-        className={`fixed inset-y-0 left-0 z-50 w-64 border-r border-border-color bg-white transition-transform lg:translate-x-0 ${
+        className={`fixed inset-y-0 left-0 z-50 w-64 border-r border-primary/10 bg-gradient-to-b from-white to-pale-green transition-transform lg:translate-x-0 ${
           open ? 'translate-x-0' : '-translate-x-full'
         }`}
       >

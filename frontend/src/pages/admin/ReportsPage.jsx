@@ -39,25 +39,34 @@ const tabColumns = {
 }
 
 export default function ReportsPage() {
-  const [from, setFrom] = useState(firstOfMonth())
-  const [to, setTo] = useState(today())
+  const [from, setFrom] = useState('')
+  const [to, setTo] = useState('')
   const [activeTab, setActiveTab] = useState('payments')
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const rangeInvalid = Boolean(from && to && from > to)
 
   const load = useCallback(async () => {
+    if (from && to && from > to) {
+      setError(null)
+      setData(null)
+      setLoading(false)
+      return
+    }
     setLoading(true)
     setError(null)
     try {
-      const params = { from, to }
+      const params = {}
+      if (from) params.from = from
+      if (to) params.to = to
       const res =
         activeTab === 'payments'
           ? await reportService.payments(params)
           : activeTab === 'members'
             ? await reportService.members(params)
             : await reportService.attendance(params)
-      setData(res.data.data)
+      setData(res.data)
     } catch (err) {
       setError(getErrorMessage(err))
     } finally {
@@ -81,7 +90,7 @@ export default function ReportsPage() {
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `gym-${activeTab}-report-${from}-to-${to}.csv`
+    a.download = `gym-${activeTab}-report-${from || 'all'}-to-${to || 'all'}.csv`
     a.click()
     URL.revokeObjectURL(url)
     toast.success('Export downloaded')
@@ -99,12 +108,28 @@ export default function ReportsPage() {
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
           <div>
             <label className="label">From</label>
-            <input type="date" className="input !w-auto" value={from} onChange={(e) => setFrom(e.target.value)} />
+            <input type="date" className={`input !w-auto ${rangeInvalid ? 'input-invalid' : ''}`} value={from} onChange={(e) => setFrom(e.target.value)} />
           </div>
           <div>
             <label className="label">To</label>
-            <input type="date" className="input !w-auto" value={to} onChange={(e) => setTo(e.target.value)} />
+            <input type="date" className={`input !w-auto ${rangeInvalid ? 'input-invalid' : ''}`} value={to} onChange={(e) => setTo(e.target.value)} />
+            {rangeInvalid && <p className="form-error">End date must be on or after the start date.</p>}
           </div>
+          {(from || to) && (
+            <button
+              type="button"
+              className="btn-secondary"
+              onClick={() => {
+                setFrom('')
+                setTo('')
+              }}
+            >
+              Show All Time
+            </button>
+          )}
+          <p className="text-xs text-secondary-text">
+            {from || to ? 'Filtering the selected period.' : 'Showing all records. Set dates to filter.'}
+          </p>
           <div className="flex gap-1 sm:ml-auto">
             {[
               { id: 'payments', label: 'Payments', icon: CreditCard },
@@ -194,13 +219,4 @@ export default function ReportsPage() {
       ) : null}
     </div>
   )
-}
-
-function today() {
-  return new Date().toISOString().slice(0, 10)
-}
-
-function firstOfMonth() {
-  const d = new Date()
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`
 }

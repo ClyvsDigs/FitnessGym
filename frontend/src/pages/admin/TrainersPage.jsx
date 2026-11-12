@@ -7,13 +7,15 @@ import ErrorState from '@/components/common/ErrorState'
 import LoadingSpinner from '@/components/common/LoadingSpinner'
 import Modal from '@/components/common/Modal'
 import Pagination from '@/components/common/Pagination'
+import PhotoUploader from '@/components/common/PhotoUploader'
 import { TableSkeleton } from '@/components/common/Skeleton'
 import StatusBadge from '@/components/common/StatusBadge'
 import PageHeader from '@/components/layout/PageHeader'
 import { useDebounce } from '@/hooks/useDebounce'
 import { trainerService } from '@/services'
 import { getErrorMessage } from '@/services/api'
-import { getInitials } from '@/utils/format'
+import { getInitials, sanitizePhone } from '@/utils/format'
+import { isValidEmail, isValidName, isValidPassword, isValidPhone } from '@/utils/validation'
 
 const initialForm = {
   first_name: '',
@@ -38,6 +40,11 @@ export default function TrainersPage() {
   const [formOpen, setFormOpen] = useState(false)
   const [editing, setEditing] = useState(null)
   const [form, setForm] = useState(initialForm)
+  const [errors, setErrors] = useState({})
+  const [photoFile, setPhotoFile] = useState(null)
+  const [photoPreview, setPhotoPreview] = useState('')
+  const [createAccount, setCreateAccount] = useState(false)
+  const [password, setPassword] = useState('')
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(null)
 
@@ -60,6 +67,11 @@ export default function TrainersPage() {
 
   const openForm = (trainer = null) => {
     setEditing(trainer)
+    setErrors({})
+    setPhotoFile(null)
+    setPhotoPreview(trainer?.photo_url || '')
+    setCreateAccount(false)
+    setPassword('')
     setForm(
       trainer
         ? {
@@ -77,20 +89,63 @@ export default function TrainersPage() {
     setFormOpen(true)
   }
 
+  const setField = (key, value) => {
+    setForm((prev) => ({ ...prev, [key]: value }))
+    setErrors((prev) => (prev[key] ? { ...prev, [key]: undefined } : prev))
+  }
+
+  const validate = () => {
+    const next = {}
+    if (!form.first_name.trim()) next.first_name = 'First name is required.'
+    else if (!isValidName(form.first_name)) next.first_name = 'Use letters, spaces, hyphens, apostrophes or periods only.'
+    if (!form.last_name.trim()) next.last_name = 'Last name is required.'
+    else if (!isValidName(form.last_name)) next.last_name = 'Use letters, spaces, hyphens, apostrophes or periods only.'
+    if (!form.email.trim()) next.email = 'Email is required.'
+    else if (!isValidEmail(form.email)) next.email = 'Enter a valid email address.'
+    if (form.phone && !isValidPhone(form.phone)) next.phone = 'Enter a valid PH mobile number (e.g. 09171234567).'
+    if (form.specialization && form.specialization.length > 255) next.specialization = 'Maximum 255 characters.'
+    if (form.availability && form.availability.length > 255) next.availability = 'Maximum 255 characters.'
+    if (form.bio && form.bio.length > 2000) next.bio = 'Maximum 2000 characters.'
+    if (!editing?.user_id && createAccount && !password) {
+      next.password = 'Password is required to create a login account.'
+    } else if (password && !isValidPassword(password)) {
+      next.password = 'At least 8 characters with letters and numbers.'
+    }
+    return next
+  }
+
   const submit = async (e) => {
     e.preventDefault()
+    if (saving) return
+    const validation = validate()
+    if (Object.keys(validation).length) {
+      setErrors(validation)
+      return
+    }
+
     setSaving(true)
+    setErrors({})
     try {
+      const payload = new FormData()
+      Object.entries(form).forEach(([key, value]) => payload.append(key, value ?? ''))
+      payload.append('create_account', createAccount ? '1' : '0')
+      if (password && (createAccount || editing?.user_id)) payload.append('password', password)
+      if (photoFile) payload.append('photo', photoFile)
+
       if (editing) {
-        await trainerService.update(editing.id, form)
+        await trainerService.updateWithPhoto(editing.id, payload)
         toast.success('Trainer updated')
       } else {
-        await trainerService.create(form)
+        await trainerService.createWithPhoto(payload)
         toast.success('Trainer created')
       }
       setFormOpen(false)
       load()
     } catch (err) {
+      const fieldErrors = err?.response?.data?.errors
+      if (fieldErrors) {
+        setErrors(Object.fromEntries(Object.entries(fieldErrors).map(([key, value]) => [key, [].concat(value)[0]])))
+      }
       toast.error(getErrorMessage(err))
     } finally {
       setSaving(false)
@@ -154,12 +209,19 @@ export default function TrainersPage() {
                     <tr key={t.id} className="hover:bg-slate-50">
                       <td className="table-td">
                         <div className="flex items-center gap-3">
-                          <span className="flex h-9 w-9 items-center justify-center rounded-full bg-light-green text-xs font-bold text-primary">
-                            {getInitials(t.full_name)}
-                          </span>
+                          {t.photo_url ? (
+                            <img src={t.photo_url} alt={t.full_name} className="h-9 w-9 rounded-full object-cover" />
+                          ) : (
+                            <span className="flex h-9 w-9 items-center justify-center rounded-full bg-light-green text-xs font-bold text-primary">
+                              {getInitials(t.full_name)}
+                            </span>
+                          )}
                           <div>
                             <p className="font-medium">{t.full_name}</p>
                             <p className="text-xs text-secondary-text">{t.email}</p>
+                            <p className={`text-xs font-medium ${t.has_login ? 'text-primary' : 'text-secondary-text'}`}>
+                              {t.has_login ? 'Login account enabled' : 'No login account'}
+                            </p>
                           </div>
                         </div>
                       </td>
@@ -187,42 +249,133 @@ export default function TrainersPage() {
         )}
       </div>
 
-      <Modal open={formOpen} title={editing ? 'Edit Trainer' : 'Add Trainer'} onClose={() => setFormOpen(false)}>
-        <form onSubmit={submit} className="grid gap-4 sm:grid-cols-2">
+      <Modal open={formOpen} title={editing ? 'Edit Trainer' : 'Add Trainer'} onClose={() => !saving && setFormOpen(false)}>
+        <form onSubmit={submit} noValidate className="grid gap-4 sm:grid-cols-2">
+          <div className="sm:col-span-2">
+            <PhotoUploader
+              name="photo"
+              preview={photoPreview}
+              fullName={`${form.first_name} ${form.last_name}`.trim()}
+              onChange={(file) => {
+                setPhotoFile(file)
+                setPhotoPreview(file ? URL.createObjectURL(file) : editing?.photo_url || '')
+              }}
+            />
+          </div>
           <div>
             <label className="label">First Name *</label>
-            <input className="input" value={form.first_name} onChange={(e) => setForm({ ...form, first_name: e.target.value })} required />
+            <input
+              className={`input ${errors.first_name ? 'input-invalid' : ''}`}
+              value={form.first_name}
+              onChange={(e) => setField('first_name', e.target.value)}
+            />
+            {errors.first_name && <p className="form-error">{errors.first_name}</p>}
           </div>
           <div>
             <label className="label">Last Name *</label>
-            <input className="input" value={form.last_name} onChange={(e) => setForm({ ...form, last_name: e.target.value })} required />
+            <input
+              className={`input ${errors.last_name ? 'input-invalid' : ''}`}
+              value={form.last_name}
+              onChange={(e) => setField('last_name', e.target.value)}
+            />
+            {errors.last_name && <p className="form-error">{errors.last_name}</p>}
           </div>
           <div>
             <label className="label">Email *</label>
-            <input type="email" className="input" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} required />
+            <input
+              type="email"
+              className={`input ${errors.email ? 'input-invalid' : ''}`}
+              value={form.email}
+              onChange={(e) => setField('email', e.target.value)}
+            />
+            {errors.email && <p className="form-error">{errors.email}</p>}
           </div>
           <div>
             <label className="label">Phone</label>
-            <input className="input" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
+            <input
+              className={`input ${errors.phone ? 'input-invalid' : ''}`}
+              value={form.phone}
+              onChange={(e) => setField('phone', sanitizePhone(e.target.value))}
+            />
+            {errors.phone && <p className="form-error">{errors.phone}</p>}
           </div>
           <div>
             <label className="label">Specialization</label>
-            <input className="input" value={form.specialization} onChange={(e) => setForm({ ...form, specialization: e.target.value })} placeholder="e.g. Strength & Conditioning" />
+            <input
+              className={`input ${errors.specialization ? 'input-invalid' : ''}`}
+              value={form.specialization}
+              onChange={(e) => setField('specialization', e.target.value)}
+              placeholder="e.g. Strength & Conditioning"
+            />
+            {errors.specialization && <p className="form-error">{errors.specialization}</p>}
           </div>
           <div>
             <label className="label">Availability</label>
-            <input className="input" value={form.availability} onChange={(e) => setForm({ ...form, availability: e.target.value })} placeholder="e.g. Mon-Fri 6AM-2PM" />
+            <input
+              className={`input ${errors.availability ? 'input-invalid' : ''}`}
+              value={form.availability}
+              onChange={(e) => setField('availability', e.target.value)}
+              placeholder="e.g. Mon-Fri 6AM-2PM"
+            />
+            {errors.availability && <p className="form-error">{errors.availability}</p>}
           </div>
           <div className="sm:col-span-2">
             <label className="label">Bio</label>
-            <textarea className="input" rows={3} value={form.bio} onChange={(e) => setForm({ ...form, bio: e.target.value })} />
+            <textarea
+              className={`input ${errors.bio ? 'input-invalid' : ''}`}
+              rows={3}
+              value={form.bio}
+              onChange={(e) => setField('bio', e.target.value)}
+            />
+            {errors.bio && <p className="form-error">{errors.bio}</p>}
           </div>
           <div>
             <label className="label">Status</label>
-            <select className="input" value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>
+            <select className="input" value={form.status} onChange={(e) => setField('status', e.target.value)}>
               <option value="active">Active</option>
               <option value="inactive">Inactive</option>
             </select>
+          </div>
+          <div className="rounded-xl border border-border-color bg-pale-green/70 p-4 sm:col-span-2">
+            <p className="text-sm font-semibold text-main-text">User Management Login</p>
+            {editing?.user_id ? (
+              <p className="mt-1 text-xs text-secondary-text">
+                This trainer already has a login account in User Management. Enter a new password below only if you want to reset it.
+              </p>
+            ) : (
+              <label className="mt-2 flex items-center gap-2 text-sm font-medium">
+                <input
+                  type="checkbox"
+                  checked={createAccount}
+                  onChange={(e) => {
+                    setCreateAccount(e.target.checked)
+                    if (!e.target.checked) setPassword('')
+                    setErrors((prev) => ({ ...prev, password: undefined }))
+                  }}
+                  className="h-4 w-4 accent-green-600"
+                />
+                Create a login account for this trainer
+              </label>
+            )}
+            {(createAccount || editing?.user_id) && (
+              <div className="mt-3">
+                <label className="label">
+                  {editing?.user_id ? 'New Password (optional)' : 'Password *'}
+                </label>
+                <input
+                  type="password"
+                  className={`input ${errors.password ? 'input-invalid' : ''}`}
+                  value={password}
+                  onChange={(e) => {
+                    setPassword(e.target.value)
+                    setErrors((prev) => ({ ...prev, password: undefined }))
+                  }}
+                  placeholder="At least 8 characters with letters and numbers"
+                  autoComplete="new-password"
+                />
+                {errors.password && <p className="form-error">{errors.password}</p>}
+              </div>
+            )}
           </div>
           <div className="flex items-end justify-end gap-3 sm:col-span-2">
             <button type="button" className="btn-secondary" onClick={() => setFormOpen(false)} disabled={saving}>Cancel</button>

@@ -24,6 +24,7 @@ export default function ForgotPasswordPage() {
   } = useForm({ resolver: zodResolver(schema) })
 
   const onSubmit = async (values) => {
+    if (submitting) return
     setSubmitting(true)
     try {
       await authService.forgotPassword(values.email)
@@ -69,7 +70,7 @@ export default function ForgotPasswordPage() {
                 <label htmlFor="email" className="label">Email Address</label>
                 <div className="relative">
                   <Mail className="pointer-events-none absolute left-3.5 top-1/2 h-4.5 w-4.5 -translate-y-1/2 text-secondary-text" />
-                  <input id="email" type="email" placeholder="you@example.com" className="input !pl-11" {...register('email')} />
+                  <input id="email" type="email" placeholder="you@example.com" className={`input !pl-11 ${errors.email ? 'input-invalid' : ''}`} {...register('email')} />
                 </div>
                 {errors.email && <p className="mt-1.5 text-xs text-red-600">{errors.email.message}</p>}
               </div>

@@ -11,13 +11,22 @@ const topLinks = [
   { to: '/admin/reports', label: 'Reports' },
 ]
 
+const memberTopLinks = [
+  { to: '/member/dashboard', label: 'Dashboard' },
+  { to: '/member/profile', label: 'My Profile' },
+]
+
+const trainerTopLinks = [{ to: '/admin/dashboard', label: 'Dashboard' }]
+
 export default function TopNavbar({ onMenuClick }) {
   const { user, logout } = useAuth()
   const [menuOpen, setMenuOpen] = useState(false)
-  const photoUrl = user?.member?.photo_url || null
+  const links =
+    user?.role === 'member' ? memberTopLinks : user?.role === 'trainer' ? trainerTopLinks : topLinks
+  const photoUrl = user?.avatar_url || user?.trainer?.photo_url || user?.member?.photo_url || null
 
   return (
-    <header className="sticky top-0 z-30 border-b border-border-color bg-white/95 backdrop-blur">
+    <header className="sticky top-0 z-30 border-b border-primary/10 bg-white/95 backdrop-blur">
       <div className="flex h-16 items-center justify-between px-4 sm:px-6 lg:px-8">
         <div className="flex items-center gap-3">
           <button
@@ -27,18 +36,18 @@ export default function TopNavbar({ onMenuClick }) {
           >
             <Menu className="h-5 w-5" />
           </button>
-          <Link to="/admin/dashboard" className="flex items-center gap-2.5">
+          <Link to={user?.role === 'member' ? '/member/dashboard' : '/admin/dashboard'} className="flex items-center gap-2.5">
             <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-accent">
               <LayoutDashboard className="h-5 w-5 text-white" />
             </span>
             <span className="hidden text-sm font-extrabold tracking-tight text-primary-dark sm:block">
-              GYM FITNESS MANAGEMENT SYSTEM
+              GYM FITNESS
             </span>
           </Link>
         </div>
 
         <nav className="hidden items-center gap-1 lg:flex">
-          {topLinks.map((link) => (
+          {links.map((link) => (
             <Link
               key={link.to}
               to={link.to}
@@ -52,7 +61,9 @@ export default function TopNavbar({ onMenuClick }) {
         <div className="relative">
           <button
             onClick={() => setMenuOpen((v) => !v)}
-            className="flex items-center gap-2 rounded-full p-1 transition-colors hover:bg-slate-100"
+            className="flex items-center gap-2 rounded-full p-1 transition-colors hover:bg-pale-green"
+            aria-label={`Account menu for ${user?.name || 'user'}`}
+            title={user?.name || 'Account'}
           >
             <span className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-full bg-primary text-sm font-semibold text-white">
               {photoUrl ? (

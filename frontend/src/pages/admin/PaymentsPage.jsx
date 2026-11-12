@@ -37,6 +37,7 @@ export default function PaymentsPage() {
   const [page, setPage] = useState(1)
   const [formOpen, setFormOpen] = useState(false)
   const [form, setForm] = useState(initialForm)
+  const [errors, setErrors] = useState({})
   const [saving, setSaving] = useState(false)
   const [members, setMembers] = useState([])
   const [plans, setPlans] = useState([])
@@ -60,6 +61,7 @@ export default function PaymentsPage() {
 
   const openForm = async () => {
     setForm({ ...initialForm, membership_start_date: new Date().toISOString().slice(0, 10) })
+    setErrors({})
     setFormOpen(true)
     try {
       const [membersRes, plansRes] = await Promise.all([
@@ -73,9 +75,42 @@ export default function PaymentsPage() {
     }
   }
 
+  const setField = (key, value) => {
+    setForm((prev) => ({ ...prev, [key]: value }))
+    setErrors((prev) => (prev[key] ? { ...prev, [key]: undefined } : prev))
+  }
+
+  const validate = () => {
+    const next = {}
+    if (!form.member_id) next.member_id = 'Select a member.'
+    const amount = Number(form.amount)
+    if (form.amount === '' || Number.isNaN(amount)) next.amount = 'Amount is required.'
+    else if (amount <= 0) next.amount = 'Amount must be greater than zero.'
+    if (!['cash', 'card', 'bank_transfer', 'e_wallet'].includes(form.payment_method)) next.payment_method = 'Select a payment method.'
+    if (form.reference_number.length > 255) next.reference_number = 'Reference must be 255 characters or fewer.'
+    if (form.notes.length > 2000) next.notes = 'Notes must be 2000 characters or fewer.'
+    if (form.create_membership) {
+      if (!form.membership_plan_id) next.membership_plan_id = 'Select a plan.'
+      if (!form.membership_start_date) next.membership_start_date = 'Start date is required.'
+      const plan = plans.find((p) => String(p.id) === String(form.membership_plan_id))
+      if (plan && amount > 0 && amount < Number(plan.price)) {
+        next.amount = `Amount must be at least the plan price (${formatCurrency(plan.price)}).`
+      }
+    }
+    return next
+  }
+
   const submit = async (e) => {
     e.preventDefault()
+    if (saving) return
+    const validation = validate()
+    if (Object.keys(validation).length) {
+      setErrors(validation)
+      return
+    }
+
     setSaving(true)
+    setErrors({})
     try {
       const payload = {
         ...form,
@@ -83,13 +118,17 @@ export default function PaymentsPage() {
         membership_plan_id: form.membership_plan_id ? Number(form.membership_plan_id) : null,
         amount: Number(form.amount),
         create_membership: form.create_membership,
-        paid_at: form.status === 'paid' ? new Date().toISOString() : null,
       }
+      delete payload.paid_at
       await paymentService.create(payload)
       toast.success('Payment recorded')
       setFormOpen(false)
       load()
     } catch (err) {
+      const fieldErrors = err?.response?.data?.errors
+      if (fieldErrors) {
+        setErrors(Object.fromEntries(Object.entries(fieldErrors).map(([key, value]) => [key, [].concat(value)[0]])))
+      }
       toast.error(getErrorMessage(err))
     } finally {
       setSaving(false)
@@ -160,34 +199,44 @@ export default function PaymentsPage() {
         )}
       </div>
 
-      <Modal open={formOpen} title="Record Payment" onClose={() => setFormOpen(false)}>
-        <form onSubmit={submit} className="space-y-4">
+      <Modal open={formOpen} title="Record Payment" onClose={() => !saving && setFormOpen(false)}>
+        <form onSubmit={submit} noValidate className="space-y-4">
           <div>
             <label className="label">Member *</label>
-            <select className="input" value={form.member_id} onChange={(e) => setForm({ ...form, member_id: e.target.value })} required>
+            <select className={`input ${errors.member_id ? 'input-invalid' : ''}`} value={form.member_id} onChange={(e) => setField('member_id', e.target.value)}>
               <option value="">Select member</option>
               {members.map((m) => (
                 <option key={m.id} value={m.id}>{m.full_name} ({m.member_code})</option>
               ))}
             </select>
+            {errors.member_id && <p className="form-error">{errors.member_id}</p>}
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
               <label className="label">Amount *</label>
-              <input type="number" min="0" step="0.01" className="input" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} required />
+              <input
+                type="number"
+                min="0.01"
+                step="0.01"
+                className={`input ${errors.amount ? 'input-invalid' : ''}`}
+                value={form.amount}
+                onChange={(e) => setField('amount', e.target.value)}
+              />
+              {errors.amount && <p className="form-error">{errors.amount}</p>}
             </div>
             <div>
               <label className="label">Method *</label>
-              <select className="input" value={form.payment_method} onChange={(e) => setForm({ ...form, payment_method: e.target.value })}>
+              <select className={`input ${errors.payment_method ? 'input-invalid' : ''}`} value={form.payment_method} onChange={(e) => setField('payment_method', e.target.value)}>
                 <option value="cash">Cash</option>
                 <option value="card">Card</option>
                 <option value="bank_transfer">Bank Transfer</option>
                 <option value="e_wallet">E-Wallet</option>
               </select>
+              {errors.payment_method && <p className="form-error">{errors.payment_method}</p>}
             </div>
             <div>
               <label className="label">Status *</label>
-              <select className="input" value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>
+              <select className="input" value={form.status} onChange={(e) => setField('status', e.target.value)}>
                 <option value="pending">Pending</option>
                 <option value="paid">Paid</option>
                 <option value="failed">Failed</option>
@@ -196,19 +245,26 @@ export default function PaymentsPage() {
             </div>
             <div>
               <label className="label">Reference #</label>
-              <input className="input" value={form.reference_number} onChange={(e) => setForm({ ...form, reference_number: e.target.value })} />
+              <input
+                className={`input ${errors.reference_number ? 'input-invalid' : ''}`}
+                value={form.reference_number}
+                onChange={(e) => setField('reference_number', e.target.value)}
+                maxLength={255}
+              />
+              {errors.reference_number && <p className="form-error">{errors.reference_number}</p>}
             </div>
           </div>
           <div>
             <label className="label">Notes</label>
-            <textarea className="input" rows={2} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
+            <textarea className="input" rows={2} value={form.notes} onChange={(e) => setField('notes', e.target.value)} />
+            {errors.notes && <p className="form-error">{errors.notes}</p>}
           </div>
 
           <label className="flex items-center gap-2 rounded-xl border border-primary/30 bg-pale-green p-3 text-sm font-medium text-primary">
             <input
               type="checkbox"
               checked={form.create_membership}
-              onChange={(e) => setForm({ ...form, create_membership: e.target.checked })}
+              onChange={(e) => setField('create_membership', e.target.checked)}
               className="h-4 w-4 accent-green-600"
             />
             Create / renew membership with this payment
@@ -218,16 +274,35 @@ export default function PaymentsPage() {
             <div className="grid gap-4 sm:grid-cols-3">
               <div>
                 <label className="label">Plan *</label>
-                <select className="input" value={form.membership_plan_id} onChange={(e) => setForm({ ...form, membership_plan_id: e.target.value })} required>
+                <select
+                  className={`input ${errors.membership_plan_id ? 'input-invalid' : ''}`}
+                  value={form.membership_plan_id}
+                  onChange={(e) => {
+                    const plan = plans.find((p) => String(p.id) === e.target.value)
+                    setForm((prev) => ({
+                      ...prev,
+                      membership_plan_id: e.target.value,
+                      amount: plan && !prev.amount ? String(plan.price) : prev.amount,
+                    }))
+                    setErrors((prev) => ({ ...prev, membership_plan_id: undefined, amount: undefined }))
+                  }}
+                >
                   <option value="">Select plan</option>
                   {plans.map((p) => (
-                    <option key={p.id} value={p.id}>{p.name}</option>
+                    <option key={p.id} value={p.id}>{p.name} — {formatCurrency(p.price)}</option>
                   ))}
                 </select>
+                {errors.membership_plan_id && <p className="form-error">{errors.membership_plan_id}</p>}
               </div>
               <div>
                 <label className="label">Start Date *</label>
-                <input type="date" className="input" value={form.membership_start_date} onChange={(e) => setForm({ ...form, membership_start_date: e.target.value })} required />
+                <input
+                  type="date"
+                  className={`input ${errors.membership_start_date ? 'input-invalid' : ''}`}
+                  value={form.membership_start_date}
+                  onChange={(e) => setField('membership_start_date', e.target.value)}
+                />
+                {errors.membership_start_date && <p className="form-error">{errors.membership_start_date}</p>}
               </div>
             </div>
           )}

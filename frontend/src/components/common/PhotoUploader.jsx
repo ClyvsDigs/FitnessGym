@@ -9,8 +9,9 @@ export default function PhotoUploader({ name, preview, onChange, fullName }) {
 
   const handleFile = (file) => {
     if (!file) return
-    if (!file.type.startsWith('image/')) {
-      toast.error('Please select an image file.')
+    const allowed = ['image/jpeg', 'image/jpg', 'image/png']
+    if (!allowed.includes(file.type)) {
+      toast.error('Please select a JPG or PNG image.')
       return
     }
     if (file.size > 2 * 1024 * 1024) {
@@ -68,7 +69,7 @@ export default function PhotoUploader({ name, preview, onChange, fullName }) {
         ref={inputRef}
         type="file"
         name={name}
-        accept="image/png,image/jpeg,image/jpg,image/webp"
+        accept="image/png,image/jpeg,image/jpg"
         className="hidden"
         onChange={(e) => {
           handleFile(e.target.files?.[0])

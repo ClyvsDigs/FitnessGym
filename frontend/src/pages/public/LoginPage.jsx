@@ -18,6 +18,7 @@ export default function LoginPage() {
   const navigate = useNavigate()
   const [showPassword, setShowPassword] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+  const [serverError, setServerError] = useState('')
 
   const {
     register,
@@ -30,7 +31,9 @@ export default function LoginPage() {
   }
 
   const onSubmit = async (values) => {
+    if (submitting) return
     setSubmitting(true)
+    setServerError('')
     const result = await login(values.email, values.password)
     setSubmitting(false)
 
@@ -38,6 +41,7 @@ export default function LoginPage() {
       toast.success(`Welcome back, ${result.user.name}!`)
       navigate(result.user.role === 'member' ? '/member/dashboard' : '/admin/dashboard')
     } else {
+      setServerError(result.message)
       toast.error(result.message)
     }
   }
@@ -89,7 +93,7 @@ export default function LoginPage() {
                       type="email"
                       autoComplete="email"
                       placeholder="you@example.com"
-                      className="input !pl-11"
+                      className={`input !pl-11 ${errors.email ? 'input-invalid' : ''}`}
                       {...register('email')}
                     />
                   </div>
@@ -110,7 +114,7 @@ export default function LoginPage() {
                       type={showPassword ? 'text' : 'password'}
                       autoComplete="current-password"
                       placeholder="••••••••"
-                      className="input !pl-11 !pr-11"
+                      className={`input !pl-11 !pr-11 ${errors.password ? 'input-invalid' : ''}`}
                       {...register('password')}
                     />
                     <button
@@ -119,11 +123,15 @@ export default function LoginPage() {
                       className="absolute right-3 top-1/2 -translate-y-1/2 text-secondary-text hover:text-primary"
                       aria-label={showPassword ? 'Hide password' : 'Show password'}
                     >
-                      {showPassword ? <EyeOff className="h-4.5 w-4.5" /> : <Eye className="h-4.5 w-4.5" />}
+                      {showPassword ? <Eye className="h-4.5 w-4.5" /> : <EyeOff className="h-4.5 w-4.5" />}
                     </button>
                   </div>
                   {errors.password && <p className="mt-1.5 text-xs text-red-600">{errors.password.message}</p>}
                 </div>
+
+                {serverError && (
+                  <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600">{serverError}</p>
+                )}
 
                 <button type="submit" className="btn-primary w-full !py-3" disabled={submitting}>
                   {submitting ? <LoadingSpinner size="sm" /> : <LogIn className="h-4.5 w-4.5" />}

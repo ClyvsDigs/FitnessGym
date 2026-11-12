@@ -9,6 +9,8 @@ use App\Http\Resources\MembershipResource;
 use App\Http\Resources\PaymentResource;
 use App\Models\Member;
 use App\Models\Membership;
+use App\Models\MembershipPlan;
+use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -79,15 +81,17 @@ class MemberController extends Controller
             $member = Member::create($data);
 
             if ($request->filled('plan_id')) {
-                $plan = \App\Models\MembershipPlan::findOrFail($request->plan_id);
-                $start = $request->input('membership_start_date');
-                $end = $request->input('membership_end_date') ?? now()->addDays($plan->duration_days)->toDateString();
+                $plan = MembershipPlan::whereKey($request->plan_id)->where('status', 'active')->firstOrFail();
+                $start = Carbon::parse($request->input('membership_start_date'));
+                $end = $request->filled('membership_end_date')
+                    ? Carbon::parse($request->input('membership_end_date'))
+                    : $start->copy()->addDays($plan->duration_days);
 
                 $membership = Membership::create([
                     'member_id' => $member->id,
                     'membership_plan_id' => $plan->id,
-                    'start_date' => $start,
-                    'end_date' => $end,
+                    'start_date' => $start->toDateString(),
+                    'end_date' => $end->toDateString(),
                     'amount' => $plan->price,
                     'status' => 'active',
                     'created_by' => $request->user()->id,
@@ -119,32 +123,39 @@ class MemberController extends Controller
 
     public function update(MemberRequest $request, Member $member): JsonResponse
     {
-        $data = $request->safe()->except(['plan_id', 'membership_start_date', 'membership_end_date', 'photo']);
+        DB::transaction(function () use ($request, $member) {
+            $data = $request->safe()->except(['plan_id', 'membership_start_date', 'membership_end_date', 'photo']);
 
-        if ($request->hasFile('photo')) {
-            $data['photo'] = $request->file('photo')->store('members', 'public');
-        }
+            if ($request->hasFile('photo')) {
+                if ($member->photo && \Storage::disk('public')->exists($member->photo)) {
+                    \Storage::disk('public')->delete($member->photo);
+                }
+                $data['photo'] = $request->file('photo')->store('members', 'public');
+            }
 
-        $member->update($data);
+            $member->update($data);
 
-        if ($request->filled('plan_id') && $request->filled('membership_start_date')) {
-            DB::transaction(function () use ($request, $member) {
+            if ($request->filled('plan_id') && $request->filled('membership_start_date')) {
                 $member->memberships()->where('status', 'active')->update(['status' => 'cancelled']);
-                $plan = \App\Models\MembershipPlan::findOrFail($request->plan_id);
+                $plan = MembershipPlan::whereKey($request->plan_id)->where('status', 'active')->firstOrFail();
+                $start = Carbon::parse($request->input('membership_start_date'));
+                $end = $request->filled('membership_end_date')
+                    ? Carbon::parse($request->input('membership_end_date'))
+                    : $start->copy()->addDays($plan->duration_days);
 
                 Membership::create([
                     'member_id' => $member->id,
                     'membership_plan_id' => $plan->id,
-                    'start_date' => $request->membership_start_date,
-                    'end_date' => $request->membership_end_date ?? now()->addDays($plan->duration_days)->toDateString(),
+                    'start_date' => $start->toDateString(),
+                    'end_date' => $end->toDateString(),
                     'amount' => $plan->price,
                     'status' => 'active',
                     'created_by' => $request->user()->id,
                 ]);
 
                 $member->update(['status' => 'active']);
-            });
-        }
+            }
+        });
 
         return response()->json([
             'message' => 'Member updated successfully.',
@@ -165,13 +176,23 @@ class MemberController extends Controller
 
     public function destroy(Member $member): JsonResponse
     {
-        if ($member->memberships()->where('status', 'active')->exists()) {
+        if ($member->status === 'active' && $member->memberships()->where('status', 'active')->exists()) {
             return response()->json([
                 'message' => 'Cannot delete a member with an active membership. Cancel or expire the membership first.',
             ], 422);
         }
 
-        DB::transaction(fn () => $member->delete());
+        DB::transaction(function () use ($member) {
+            $member->memberships()->where('status', 'active')->update(['status' => 'cancelled']);
+
+            $user = $member->user;
+            if ($user && $user->role === 'member') {
+                $user->tokens()->delete();
+                $user->delete();
+            }
+
+            $member->delete();
+        });
 
         return response()->json(['message' => 'Member deleted successfully.']);
     }

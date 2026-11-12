@@ -4,6 +4,7 @@ import Pagination from '@/components/common/Pagination'
 import StatusBadge from '@/components/common/StatusBadge'
 import { TableSkeleton } from '@/components/common/Skeleton'
 import { getInitials } from '@/utils/format'
+import { Link } from 'react-router-dom'
 
 export default function MemberTable({ members, loading, meta, selectedId, onSelect, onView, onEdit, onDelete, onPageChange }) {
   if (loading) {
@@ -67,14 +68,10 @@ export default function MemberTable({ members, loading, meta, selectedId, onSele
                   <StatusBadge status={member.status} />
                 </td>
                 <td className="table-td">
-                  <div className="flex items-center justify-end gap-1">
-                    <button
-                      onClick={(e) => { e.stopPropagation(); onView(member) }}
-                      className="rounded-lg p-2 text-secondary-text transition-colors hover:bg-sky-50 hover:text-sky-600"
-                      title="View details"
-                    >
-                      <Eye className="h-4 w-4" />
-                    </button>
+                  <div className="inline-flex items-center justify-center rounded-lg p-2 text-secondary-text transition-colors hover:bg-sky-50 hover:text-sky-600">
+                    <Link to={`/admin/members/${member.id}`}>
+  <Eye className="w-4 h-4"/>
+</Link>
                     <button
                       onClick={(e) => { e.stopPropagation(); onEdit(member) }}
                       className="rounded-lg p-2 text-secondary-text transition-colors hover:bg-amber-50 hover:text-amber-600"

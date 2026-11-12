@@ -25,7 +25,7 @@ export default function DeleteMemberDialog({ member, open, onClose, onDeleted })
     <ConfirmDialog
       open={open}
       title="Delete Member"
-      message={`Are you sure you want to delete ${member?.full_name}? This action cannot be undone. Members with an active membership cannot be deleted.`}
+      message={`Are you sure you want to delete ${member?.full_name}? This action cannot be undone. Active members with an active membership cannot be deleted — suspend or expire the membership first.`}
       confirmLabel="Delete"
       loading={loading}
       onConfirm={confirm}

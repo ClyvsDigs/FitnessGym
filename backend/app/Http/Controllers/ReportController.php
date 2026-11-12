@@ -4,24 +4,22 @@ namespace App\Http\Controllers;
 
 use App\Models\AttendanceRecord;
 use App\Models\Member;
-use App\Models\Membership;
 use App\Models\MembershipPlan;
 use App\Models\Payment;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+
 class ReportController extends Controller
 {
     public function members(Request $request): JsonResponse
     {
         [$from, $to] = $this->dateRange($request);
 
-        $query = Member::query();
-
-        if ($from && $to) {
-            $query->whereBetween('created_at', [$from, $to]);
-        }
+        $query = Member::query()
+            ->when($from, fn ($q) => $q->where('created_at', '>=', $from))
+            ->when($to, fn ($q) => $q->where('created_at', '<=', $to));
 
         $statusCounts = $query->clone()->groupBy('status')->selectRaw('status, COUNT(*) as count')->pluck('count', 'status');
         $total = $query->clone()->count();
@@ -67,28 +65,38 @@ class ReportController extends Controller
     {
         [$from, $to] = $this->dateRange($request);
 
-        $query = Payment::with(['member', 'plan']);
-
-        if ($from && $to) {
-            $query->whereBetween('created_at', [$from, $to]);
-        }
+        $query = Payment::with(['member', 'plan'])
+            ->when($from, fn ($q) => $q->where('created_at', '>=', $from))
+            ->when($to, fn ($q) => $q->where('created_at', '<=', $to));
 
         $statusCounts = Payment::query()
-            ->when($from, fn ($q) => $q->whereBetween('created_at', [$from, $to]))
+            ->when($from, fn ($q) => $q->where('created_at', '>=', $from))
+            ->when($to, fn ($q) => $q->where('created_at', '<=', $to))
             ->groupBy('status')->selectRaw('status, COUNT(*) as count')->pluck('count', 'status');
 
+        // Revenue is calculated only from actual paid transactions (refunded/failed/pending excluded).
         $totalRevenue = (float) Payment::query()
             ->where('status', 'paid')
-            ->when($from, fn ($q) => $q->whereBetween('paid_at', [$from, $to]))
+            ->when($from, fn ($q) => $q->where('paid_at', '>=', $from))
+            ->when($to, fn ($q) => $q->where('paid_at', '<=', $to))
             ->sum('amount');
 
         $driver = DB::getDriverName();
         $monthExpr = $driver === 'sqlite' ? "strftime('%Y-%m', paid_at)" : "DATE_FORMAT(paid_at, '%Y-%m')";
 
-        $monthly = Payment::query()
+        $monthlyQuery = Payment::query()
             ->where('status', 'paid')
-            ->whereNotNull('paid_at')
-            ->where('paid_at', '>=', Carbon::now()->subMonthsNoOverflow(11)->startOfMonth())
+            ->whereNotNull('paid_at');
+
+        if ($from || $to) {
+            $monthlyQuery
+                ->when($from, fn ($q) => $q->where('paid_at', '>=', $from))
+                ->when($to, fn ($q) => $q->where('paid_at', '<=', $to));
+        } else {
+            $monthlyQuery->where('paid_at', '>=', Carbon::now()->subMonthsNoOverflow(11)->startOfMonth());
+        }
+
+        $monthly = $monthlyQuery
             ->selectRaw("{$monthExpr} as month, SUM(amount) as total, COUNT(*) as count")
             ->groupBy('month')
             ->orderBy('month')
@@ -126,14 +134,13 @@ class ReportController extends Controller
     {
         [$from, $to] = $this->dateRange($request);
 
-        $query = AttendanceRecord::with('member');
-
-        if ($from && $to) {
-            $query->whereBetween('date', [$from->toDateString(), $to->toDateString()]);
-        }
+        $query = AttendanceRecord::with('member')
+            ->when($from, fn ($q) => $q->where('date', '>=', $from->toDateString()))
+            ->when($to, fn ($q) => $q->where('date', '<=', $to->toDateString()));
 
         $daily = AttendanceRecord::query()
-            ->when($from, fn ($q) => $q->whereBetween('date', [$from->toDateString(), $to->toDateString()]))
+            ->when($from, fn ($q) => $q->where('date', '>=', $from->toDateString()))
+            ->when($to, fn ($q) => $q->where('date', '<=', $to->toDateString()))
             ->selectRaw("date, COUNT(*) as count, SUM(CASE WHEN status = 'late' THEN 1 ELSE 0 END) as late_count")
             ->groupBy('date')
             ->orderBy('date')
@@ -169,6 +176,13 @@ class ReportController extends Controller
 
     private function dateRange(Request $request): array
     {
+        $request->validate([
+            'from' => ['nullable', 'date'],
+            'to' => ['nullable', 'date', 'after_or_equal:from'],
+        ], [
+            'to.after_or_equal' => 'The end date must be on or after the start date.',
+        ]);
+
         $from = $request->query('from');
         $to = $request->query('to');
 

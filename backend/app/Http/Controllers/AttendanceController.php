@@ -47,6 +47,26 @@ class AttendanceController extends Controller
         $member = Member::findOrFail($request->member_id);
         $today = now()->toDateString();
 
+        if ($member->status === 'suspended') {
+            return response()->json(['message' => 'Suspended members cannot check in.'], 422);
+        }
+
+        if ($member->status === 'expired') {
+            return response()->json(['message' => 'Members with an expired membership cannot check in.'], 422);
+        }
+
+        $hasActiveMembership = $member->memberships()
+            ->where('status', 'active')
+            ->whereDate('start_date', '<=', $today)
+            ->whereDate('end_date', '>=', $today)
+            ->exists();
+
+        if (! $hasActiveMembership) {
+            return response()->json([
+                'message' => 'Member does not have a valid active membership and cannot check in.',
+            ], 422);
+        }
+
         $existing = AttendanceRecord::where('member_id', $member->id)
             ->whereDate('date', $today)
             ->first();
@@ -87,7 +107,6 @@ class AttendanceController extends Controller
         }
 
         $record->update(['check_out' => now()]);
-
         return response()->json([
             'message' => 'Checked out successfully.',
             'data' => new AttendanceResource($record->fresh()->load('member')),

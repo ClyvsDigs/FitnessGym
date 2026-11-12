@@ -7,7 +7,7 @@ export default function AdminLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
   return (
-    <div className="min-h-screen bg-main-bg">
+    <div className="min-h-screen bg-gradient-to-br from-pale-green via-main-bg to-light-green">
       <TopNavbar onMenuClick={() => setSidebarOpen(true)} />
       <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
       <main className="lg:pl-64">

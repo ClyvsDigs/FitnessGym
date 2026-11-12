@@ -11,7 +11,8 @@ import PageHeader from '@/components/layout/PageHeader'
 import { portalService, settingsService } from '@/services'
 import { getErrorMessage } from '@/services/api'
 import { useAuth } from '@/context/AuthContext'
-import { formatCurrency, formatDate, formatDateTime, getInitials } from '@/utils/format'
+import { formatCurrency, formatDate, formatDateTime, getInitials, sanitizePhone } from '@/utils/format'
+import { isValidName, isValidPassword, isValidPhone } from '@/utils/validation'
 
 export default function MemberAccountPage() {
   const { refreshUser } = useAuth()
@@ -28,6 +29,7 @@ export default function MemberAccountPage() {
   const [saving, setSaving] = useState(false)
   const [photoFile, setPhotoFile] = useState(null)
   const [photoPreview, setPhotoPreview] = useState('')
+  const [editErrors, setEditErrors] = useState({})
 
   const loadProfile = () => {
     setLoading(true)
@@ -76,7 +78,34 @@ export default function MemberAccountPage() {
     })
     setPhotoFile(null)
     setPhotoPreview(profile.photo_url || '')
+    setEditErrors({})
     setEditOpen(true)
+  }
+
+  const setEditField = (key, value) => {
+    setEditForm((prev) => ({ ...prev, [key]: value }))
+    setEditErrors((prev) => (prev[key] ? { ...prev, [key]: undefined } : prev))
+  }
+
+  const validateEdit = () => {
+    const next = {}
+    if (!editForm.first_name.trim()) next.first_name = 'First name is required.'
+    else if (!isValidName(editForm.first_name)) next.first_name = 'Use letters, spaces, hyphens, apostrophes or periods only.'
+    if (!editForm.last_name.trim()) next.last_name = 'Last name is required.'
+    else if (!isValidName(editForm.last_name)) next.last_name = 'Use letters, spaces, hyphens, apostrophes or periods only.'
+    if (editForm.phone && !isValidPhone(editForm.phone)) next.phone = 'Enter a valid PH mobile number (e.g. 09171234567).'
+    if (editForm.address && editForm.address.length > 255) next.address = 'Address must be 255 characters or fewer.'
+    if (editForm.date_of_birth && editForm.date_of_birth > new Date().toISOString().slice(0, 10)) {
+      next.date_of_birth = 'Date of birth cannot be in the future.'
+    }
+    if (editForm.emergency_contact_name && !isValidName(editForm.emergency_contact_name)) {
+      next.emergency_contact_name = 'Use letters and common name punctuation only.'
+    }
+    if (editForm.emergency_contact_phone && !isValidPhone(editForm.emergency_contact_phone)) {
+      next.emergency_contact_phone = 'Enter a valid PH mobile number (e.g. 09171234567).'
+    }
+    setEditErrors(next)
+    return Object.keys(next).length === 0
   }
 
   const handlePhotoChange = (file) => {
@@ -92,6 +121,9 @@ export default function MemberAccountPage() {
 
   const submitEdit = async (e) => {
     e.preventDefault()
+    if (saving) return
+    if (!validateEdit()) return
+
     setSaving(true)
     try {
       let res
@@ -111,6 +143,10 @@ export default function MemberAccountPage() {
       toast.success('Profile updated')
       setEditOpen(false)
     } catch (err) {
+      const fieldErrors = err?.response?.data?.errors
+      if (fieldErrors) {
+        setEditErrors(Object.fromEntries(Object.entries(fieldErrors).map(([key, value]) => [key, [].concat(value)[0]])))
+      }
       toast.error(getErrorMessage(err))
     } finally {
       setSaving(false)
@@ -287,9 +323,9 @@ export default function MemberAccountPage() {
         </div>
       </div>
 
-      <Modal open={editOpen} title="Edit Profile" onClose={() => setEditOpen(false)}>
+      <Modal open={editOpen} title="Edit Profile" onClose={() => !saving && setEditOpen(false)}>
         {editForm && (
-          <form onSubmit={submitEdit} className="grid gap-4 sm:grid-cols-2">
+          <form onSubmit={submitEdit} noValidate className="grid gap-4 sm:grid-cols-2">
             <div className="sm:col-span-2">
               <PhotoUploader
                 name="photo"
@@ -297,23 +333,39 @@ export default function MemberAccountPage() {
                 onChange={handlePhotoChange}
                 fullName={`${editForm.first_name} ${editForm.last_name}`.trim()}
               />
+              {editErrors.photo && <p className="form-error">{editErrors.photo}</p>}
             </div>
 
             <div>
               <label className="label">First Name *</label>
-              <input className="input" value={editForm.first_name} onChange={(e) => setEditForm({ ...editForm, first_name: e.target.value })} required />
+              <input
+                className={`input ${editErrors.first_name ? 'input-invalid' : ''}`}
+                value={editForm.first_name}
+                onChange={(e) => setEditField('first_name', e.target.value)}
+              />
+              {editErrors.first_name && <p className="form-error">{editErrors.first_name}</p>}
             </div>
             <div>
               <label className="label">Last Name *</label>
-              <input className="input" value={editForm.last_name} onChange={(e) => setEditForm({ ...editForm, last_name: e.target.value })} required />
+              <input
+                className={`input ${editErrors.last_name ? 'input-invalid' : ''}`}
+                value={editForm.last_name}
+                onChange={(e) => setEditField('last_name', e.target.value)}
+              />
+              {editErrors.last_name && <p className="form-error">{editErrors.last_name}</p>}
             </div>
             <div>
               <label className="label">Phone</label>
-              <input className="input" value={editForm.phone} onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })} />
+              <input
+                className={`input ${editErrors.phone ? 'input-invalid' : ''}`}
+                value={editForm.phone}
+                onChange={(e) => setEditField('phone', sanitizePhone(e.target.value))}
+              />
+              {editErrors.phone && <p className="form-error">{editErrors.phone}</p>}
             </div>
             <div>
               <label className="label">Gender</label>
-              <select className="input" value={editForm.gender} onChange={(e) => setEditForm({ ...editForm, gender: e.target.value })}>
+              <select className="input" value={editForm.gender} onChange={(e) => setEditField('gender', e.target.value)}>
                 <option value="">Select gender</option>
                 <option value="male">Male</option>
                 <option value="female">Female</option>
@@ -322,19 +374,42 @@ export default function MemberAccountPage() {
             </div>
             <div>
               <label className="label">Date of Birth</label>
-              <input type="date" className="input" value={editForm.date_of_birth} onChange={(e) => setEditForm({ ...editForm, date_of_birth: e.target.value })} />
+              <input
+                type="date"
+                className={`input ${editErrors.date_of_birth ? 'input-invalid' : ''}`}
+                value={editForm.date_of_birth}
+                onChange={(e) => setEditField('date_of_birth', e.target.value)}
+                max={new Date().toISOString().slice(0, 10)}
+              />
+              {editErrors.date_of_birth && <p className="form-error">{editErrors.date_of_birth}</p>}
             </div>
             <div className="sm:col-span-2">
               <label className="label">Address</label>
-              <input className="input" value={editForm.address} onChange={(e) => setEditForm({ ...editForm, address: e.target.value })} />
+              <input
+                className={`input ${editErrors.address ? 'input-invalid' : ''}`}
+                value={editForm.address}
+                onChange={(e) => setEditField('address', e.target.value)}
+                maxLength={255}
+              />
+              {editErrors.address && <p className="form-error">{editErrors.address}</p>}
             </div>
             <div>
               <label className="label">Emergency Contact Name</label>
-              <input className="input" value={editForm.emergency_contact_name} onChange={(e) => setEditForm({ ...editForm, emergency_contact_name: e.target.value })} />
+              <input
+                className={`input ${editErrors.emergency_contact_name ? 'input-invalid' : ''}`}
+                value={editForm.emergency_contact_name}
+                onChange={(e) => setEditField('emergency_contact_name', e.target.value)}
+              />
+              {editErrors.emergency_contact_name && <p className="form-error">{editErrors.emergency_contact_name}</p>}
             </div>
             <div>
               <label className="label">Emergency Contact Phone</label>
-              <input className="input" value={editForm.emergency_contact_phone} onChange={(e) => setEditForm({ ...editForm, emergency_contact_phone: e.target.value })} />
+              <input
+                className={`input ${editErrors.emergency_contact_phone ? 'input-invalid' : ''}`}
+                value={editForm.emergency_contact_phone}
+                onChange={(e) => setEditField('emergency_contact_phone', sanitizePhone(e.target.value))}
+              />
+              {editErrors.emergency_contact_phone && <p className="form-error">{editErrors.emergency_contact_phone}</p>}
             </div>
             <div className="flex justify-end gap-3 pt-2 sm:col-span-2">
               <button type="button" className="btn-secondary" onClick={() => setEditOpen(false)} disabled={saving}>Cancel</button>
@@ -361,16 +436,40 @@ function InfoCard({ label, value, accent }) {
 
 function PasswordCard() {
   const [form, setForm] = useState({ current_password: '', password: '', password_confirmation: '' })
+  const [errors, setErrors] = useState({})
   const [saving, setSaving] = useState(false)
+
+  const setField = (key, value) => {
+    setForm((prev) => ({ ...prev, [key]: value }))
+    setErrors((prev) => (prev[key] ? { ...prev, [key]: undefined } : prev))
+  }
+
+  const validate = () => {
+    const next = {}
+    if (!form.current_password) next.current_password = 'Current password is required.'
+    if (!form.password) next.password = 'New password is required.'
+    else if (!isValidPassword(form.password)) next.password = 'At least 8 characters with letters and numbers.'
+    if (form.password !== form.password_confirmation) next.password_confirmation = 'Passwords do not match.'
+    setErrors(next)
+    return Object.keys(next).length === 0
+  }
 
   const submit = async (e) => {
     e.preventDefault()
+    if (saving) return
+    if (!validate()) return
+
     setSaving(true)
+    setErrors({})
     try {
       await settingsService.updateProfile(form)
       toast.success('Password changed')
       setForm({ current_password: '', password: '', password_confirmation: '' })
     } catch (err) {
+      const fieldErrors = err?.response?.data?.errors
+      if (fieldErrors) {
+        setErrors(Object.fromEntries(Object.entries(fieldErrors).map(([key, value]) => [key, [].concat(value)[0]])))
+      }
       toast.error(getErrorMessage(err))
     } finally {
       setSaving(false)
@@ -378,22 +477,43 @@ function PasswordCard() {
   }
 
   return (
-    <form onSubmit={submit} className="card mt-6 space-y-4">
+    <form onSubmit={submit} noValidate className="card mt-6 space-y-4">
       <h3 className="flex items-center gap-2 text-base font-semibold">
         <Lock className="h-4.5 w-4.5 text-primary" /> Change Password
       </h3>
       <div className="grid gap-4 sm:grid-cols-3">
         <div>
           <label className="label">Current Password *</label>
-          <input type="password" className="input" value={form.current_password} onChange={(e) => setForm({ ...form, current_password: e.target.value })} required />
+          <input
+            type="password"
+            className={`input ${errors.current_password ? 'input-invalid' : ''}`}
+            value={form.current_password}
+            onChange={(e) => setField('current_password', e.target.value)}
+            autoComplete="current-password"
+          />
+          {errors.current_password && <p className="form-error">{errors.current_password}</p>}
         </div>
         <div>
           <label className="label">New Password *</label>
-          <input type="password" className="input" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} required minLength={8} />
+          <input
+            type="password"
+            className={`input ${errors.password ? 'input-invalid' : ''}`}
+            value={form.password}
+            onChange={(e) => setField('password', e.target.value)}
+            autoComplete="new-password"
+          />
+          {errors.password && <p className="form-error">{errors.password}</p>}
         </div>
         <div>
           <label className="label">Confirm Password *</label>
-          <input type="password" className="input" value={form.password_confirmation} onChange={(e) => setForm({ ...form, password_confirmation: e.target.value })} required minLength={8} />
+          <input
+            type="password"
+            className={`input ${errors.password_confirmation ? 'input-invalid' : ''}`}
+            value={form.password_confirmation}
+            onChange={(e) => setField('password_confirmation', e.target.value)}
+            autoComplete="new-password"
+          />
+          {errors.password_confirmation && <p className="form-error">{errors.password_confirmation}</p>}
         </div>
       </div>
       <button className="btn-secondary" disabled={saving}>

@@ -1,9 +1,9 @@
-import { Plus, Users } from 'lucide-react'
+import { Plus } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import PageHeader from '@/components/layout/PageHeader'
 import DeleteMemberDialog from '@/components/members/DeleteMemberDialog'
-import MemberDetails from '@/components/members/MemberDetails'
+
 import MemberFilters from '@/components/members/MemberFilters'
 import MemberForm from '@/components/members/MemberForm'
 import MemberTable from '@/components/members/MemberTable'
@@ -124,9 +124,7 @@ export default function MembersPage() {
           )}
         </div>
 
-        <div>
-          <MemberDetails member={selected} />
-        </div>
+        
       </div>
 
       <MemberForm

@@ -36,6 +36,11 @@ export function getInitials(name = '') {
     .join('')
 }
 
+/** Strip characters that aren't valid in a phone number (digits, +, -, (), space). */
+export function sanitizePhone(value = '') {
+  return String(value).replace(/[^0-9+\-()\s]/g, '')
+}
+
 export function statusColor(status) {
   const map = {
     active: 'bg-green-100 text-green-700',

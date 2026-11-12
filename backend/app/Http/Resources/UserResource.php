@@ -16,6 +16,7 @@ class UserResource extends JsonResource
             'role' => $this->role,
             'phone' => $this->phone,
             'avatar' => $this->avatar,
+            'avatar_url' => $this->avatar ? asset('storage/' . $this->avatar) : null,
             'is_active' => $this->is_active,
             'member' => new MemberResource($this->whenLoaded('member')),
             'trainer' => new TrainerResource($this->whenLoaded('trainer')),
